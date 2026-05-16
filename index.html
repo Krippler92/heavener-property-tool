@@ -21,6 +21,8 @@
     .user-bar .user-admin { color: #d4a04a; font-size: 11px; padding: 2px 8px; background: rgba(212, 160, 74, 0.15); border-radius: 10px; }
     .user-bar button { background: transparent; border: none; color: #999; cursor: pointer; font-size: 12px; padding: 4px 8px; }
     .user-bar button:hover { color: #fff; }
+    .user-bar a.plan-link { color: #999; text-decoration: none; font-size: 12px; padding: 4px 8px; }
+    .user-bar a.plan-link:hover { color: #fff; }
     .loading { display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; color: #888; font-size: 14px; }
   </style>
 </head>
@@ -2306,7 +2308,7 @@
                             >
                               <Move3D size={11} /> go to
                             </button>
-                            {(isAdmin || flag.authorUid === currentUser?.uid) && (
+                            {isAdmin && (
                               <button
                                 onClick={() => onDelete(flag.id)}
                                 style={{
@@ -2571,6 +2573,7 @@
         return (
           <>
             <div className="user-bar">
+              <a className="plan-link" href="https://gist.github.com/Krippler92/2ee4baa153bf01420d40729773896e20" target="_blank" rel="noopener noreferrer">📖 Read the Plan</a>
               <span className="user-name">{user.displayName || user.email}</span>
               {isAdmin && <span className="user-admin">admin</span>}
               <button onClick={handleSignOut}>Sign out</button>
