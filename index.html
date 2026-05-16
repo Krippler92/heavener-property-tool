@@ -1,0 +1,2595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Heavener Property Zoning Tool</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; color: #e8e8e8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #root { width: 100%; height: 100%; }
+    .auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100vw; height: 100vh; background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%); }
+    .auth-card { background: rgba(30, 30, 30, 0.95); border: 1px solid rgba(212, 160, 74, 0.3); border-radius: 12px; padding: 40px; max-width: 420px; text-align: center; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
+    .auth-card h1 { font-size: 24px; margin-bottom: 12px; color: #d4a04a; }
+    .auth-card p { color: #aaa; margin-bottom: 24px; line-height: 1.5; }
+    .auth-btn { display: inline-flex; align-items: center; gap: 12px; padding: 12px 24px; background: #fff; color: #1a1a1a; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .auth-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+    .auth-btn svg { width: 20px; height: 20px; }
+    .auth-error { color: #ef4444; margin-top: 16px; font-size: 14px; }
+    .user-bar { position: fixed; top: 12px; right: 12px; z-index: 10000; display: flex; align-items: center; gap: 10px; background: rgba(20, 20, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 6px 14px; font-size: 13px; color: #ddd; backdrop-filter: blur(8px); }
+    .user-bar .user-name { font-weight: 500; }
+    .user-bar .user-admin { color: #d4a04a; font-size: 11px; padding: 2px 8px; background: rgba(212, 160, 74, 0.15); border-radius: 10px; }
+    .user-bar button { background: transparent; border: none; color: #999; cursor: pointer; font-size: 12px; padding: 4px 8px; }
+    .user-bar button:hover { color: #fff; }
+    .loading { display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; color: #888; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="loading">Loading...</div>
+  </div>
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Babel for in-browser JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase v10 SDK (modular) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+
+    // ─── FIREBASE CONFIG (replace these placeholders with your Firebase project keys) ───
+    const firebaseConfig = {
+      apiKey: "AIzaSyCQbG1WQc5Gq4MFeg7xmM061b7kjecu2Bk",
+      authDomain: "my-app-project-a7e6b.firebaseapp.com",
+      projectId: "my-app-project-a7e6b",
+      storageBucket: "my-app-project-a7e6b.firebasestorage.app",
+      messagingSenderId: "543444366388",
+      appId: "1:543444366388:web:8a9ab00f33dade21f50661"
+    };
+
+    // ─── ADMIN EMAIL (Lee's Google account — full edit access) ───
+    const ADMIN_EMAIL = "epiccultivations@gmail.com";
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    // Expose to global scope so Babel-transformed code can access
+    window.firebaseAuth = auth;
+    window.firebaseDb = db;
+    window.firebaseProvider = provider;
+    window.firebaseSignIn = () => signInWithPopup(auth, provider);
+    window.firebaseSignOut = () => signOut(auth);
+    window.firebaseOnAuthChange = (cb) => onAuthStateChanged(auth, cb);
+    window.firebaseAddFlag = (data) => addDoc(collection(db, "flags"), data);
+    window.firebaseDeleteFlag = (id) => deleteDoc(doc(db, "flags", id));
+    window.firebaseFlagSubscribe = (cb) => {
+      const q = query(collection(db, "flags"), orderBy("createdAt", "asc"));
+      return onSnapshot(q, (snapshot) => {
+        const flags = snapshot.docs.map(d => ({ ...d.data(), id: d.id, createdAt: d.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString() }));
+        cb(flags);
+      });
+    };
+    window.firebaseServerTimestamp = serverTimestamp;
+    window.ADMIN_EMAIL = ADMIN_EMAIL;
+
+    // Signal to the React app that Firebase is ready
+    window.firebaseReady = true;
+    window.dispatchEvent(new Event("firebase-ready"));
+  </script>
+
+  <!-- Main app (loaded after Firebase, runs through Babel) -->
+  <script type="text/babel" data-type="module">
+    // Wait for Firebase before mounting
+    function mountApp() {
+      // ─── Destructure React hooks for the original component ───
+      const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+      // ─── Inline SVG icon replacements for lucide-react ───
+      const makeIcon = (paths) => ({ size = 24, color = "currentColor", strokeWidth = 2, ...rest }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...rest}>
+          {paths.map((d, i) => <path key={i} d={d} />)}
+        </svg>
+      );
+      const makeIconChildren = (children) => ({ size = 24, color = "currentColor", strokeWidth = 2, ...rest }) => (
+        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...rest}>
+          {children}
+        </svg>
+      );
+
+      // Icon set — only the ones actually used in the component
+      const Compass = makeIconChildren(<><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></>);
+      const ArrowLeft = makeIconChildren(<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>);
+      const Eye = makeIconChildren(<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>);
+      const EyeOff = makeIconChildren(<><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>);
+      const Sun = makeIconChildren(<><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>);
+      const Mountain = makeIconChildren(<path d="M8 3l4 8 5-5 5 15H2L8 3z"/>);
+      const Trees = makeIconChildren(<><path d="M10 10v.2A3 3 0 0 1 8.9 16v0H5v0h0a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z"/><path d="M7 16v6"/><path d="M13 19h6"/><path d="M16 19v-3l-3-3 3-3v-3l3 3 3-3v3l-3 3 3 3v3l-3-3-3 3z"/></>);
+      const Droplets = makeIconChildren(<><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/></>);
+      const Home = makeIconChildren(<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>);
+      const Layers = makeIconChildren(<><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>);
+      const MapIcon = makeIconChildren(<><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></>);
+      const Move3D = makeIconChildren(<><path d="M5 3v16h16"/><path d="m5 19 6-6"/><path d="m2 6 3-3 3 3"/><path d="m18 16 3 3-3 3"/></>);
+      const X = makeIconChildren(<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>);
+      const Info = makeIconChildren(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>);
+      const Flag = makeIconChildren(<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></>);
+      const FileText = makeIconChildren(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>);
+      const Trash2 = makeIconChildren(<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>);
+      const Copy = makeIconChildren(<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>);
+      const ChevronRight = makeIconChildren(<polyline points="9 18 15 12 9 6"/>);
+      const Plus = makeIconChildren(<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>);
+
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // DATA — real LIDAR elevation from USGS 3DEP 2017
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      const DEFAULT_PROPERTY = {
+        meta: {
+          name: "Heavener Homestead",
+          address: "20160 Old Hwy 59, Heavener, OK 74937",
+          coordinates: { lat: 34.86303, lon: -94.612335 },
+          acres: 15.25,
+          section: "5N 25E 36",
+          bounds: { w: 2150, h: 2200 },
+          scaleFeetPerUnit: 1,
+          boundary: [{ x: 600, y: 790 }, { x: 1620, y: 770 }, { x: 1670, y: 1410 }, { x: 560, y: 1430 }],
+          notes: "15.25 acres in LeFlore County, heavily wooded, NORTH of Old Hwy 59 (south boundary). Real LIDAR elevation from USGS 3DEP 2017 at 1m resolution. Property slopes UP from Old Hwy 59 (~530 ft at south edge) toward the wooded hill (~620 ft at north edge). The 688-ft hill PEAK sits just north of the property line, on neighbor land. KCS railroad runs parallel to Old Hwy 59.",
+        },
+        elevation: {
+          step: 50,
+          cols: 44,
+          rows: 45,
+          min: 511,
+          max: 688,
+          contourInterval: 10,
+          values: [657, 657, 655, 654, 652, 651, 650, 648, 646, 644, 641, 640, 637, 634, 633, 630, 628, 626, 625, 619, 619, 623, 629, 635, 636, 636, 637, 637, 637, 637, 636, 634, 634, 632, 631, 629, 625, 621, 617, 612, 608, 603, 599, 575, 663, 663, 663, 661, 657, 655, 654, 652, 650, 648, 644, 641, 639, 636, 634, 630, 625, 621, 622, 622, 622, 627, 628, 633, 638, 640, 642, 644, 643, 643, 642, 641, 639, 635, 632, 628, 625, 618, 614, 610, 606, 601, 597, 575, 660, 660, 660, 665, 662, 660, 658, 655, 651, 648, 645, 641, 636, 628, 623, 622, 622, 622, 622, 622, 622, 624, 630, 634, 636, 639, 642, 645, 646, 646, 644, 642, 638, 635, 630, 626, 622, 618, 613, 608, 604, 599, 596, 575, 660, 660, 660, 665, 666, 662, 660, 655, 651, 648, 643, 637, 631, 625, 628, 627, 627, 625, 628, 629, 626, 624, 625, 630, 638, 642, 644, 646, 647, 646, 644, 640, 637, 633, 629, 621, 615, 612, 605, 603, 602, 601, 599, 575, 660, 660, 662, 666, 665, 662, 658, 653, 649, 645, 635, 631, 627, 632, 633, 632, 631, 632, 633, 633, 633, 632, 630, 631, 632, 640, 644, 645, 646, 644, 643, 639, 635, 631, 628, 621, 613, 611, 611, 608, 607, 605, 603, 575, 670, 670, 667, 668, 662, 659, 655, 651, 647, 641, 635, 636, 638, 638, 638, 637, 637, 638, 638, 638, 638, 638, 637, 638, 638, 640, 643, 645, 643, 641, 638, 637, 633, 628, 626, 619, 618, 617, 615, 613, 611, 608, 606, 575, 677, 675, 667, 668, 660, 656, 653, 646, 640, 638, 643, 643, 643, 643, 643, 642, 641, 642, 642, 643, 644, 643, 643, 643, 644, 646, 647, 647, 645, 643, 640, 633, 630, 628, 627, 625, 623, 621, 620, 617, 608, 595, 590, 575, 679, 677, 667, 667, 650, 647, 647, 649, 649, 648, 648, 648, 648, 648, 648, 646, 646, 646, 647, 647, 647, 648, 647, 647, 647, 649, 650, 650, 648, 646, 643, 640, 637, 634, 632, 630, 627, 618, 609, 602, 593, 590, 587, 575, 673, 671, 666, 661, 658, 657, 657, 657, 655, 654, 653, 652, 652, 653, 652, 652, 652, 652, 652, 652, 652, 652, 652, 653, 653, 653, 654, 653, 652, 650, 649, 645, 642, 639, 633, 624, 615, 606, 598, 590, 585, 585, 584, 575, 669, 667, 665, 665, 664, 663, 663, 662, 660, 659, 658, 657, 658, 658, 659, 658, 657, 658, 658, 658, 658, 658, 658, 658, 659, 659, 660, 658, 657, 656, 654, 651, 649, 638, 627, 617, 607, 597, 589, 582, 578, 577, 568, 575, 676, 674, 672, 670, 670, 669, 669, 668, 666, 665, 665, 664, 665, 664, 663, 664, 664, 665, 665, 665, 665, 665, 665, 663, 665, 666, 666, 664, 664, 663, 663, 652, 642, 631, 621, 610, 599, 590, 581, 579, 572, 564, 566, 575, 681, 680, 679, 677, 677, 676, 675, 676, 674, 675, 674, 674, 673, 672, 673, 672, 673, 674, 674, 672, 674, 674, 671, 674, 675, 676, 676, 674, 670, 658, 651, 642, 632, 625, 613, 600, 590, 581, 574, 571, 563, 566, 565, 575, 682, 681, 682, 683, 682, 680, 677, 674, 678, 680, 682, 681, 682, 682, 681, 680, 682, 683, 683, 682, 683, 683, 683, 684, 685, 684, 677, 667, 657, 648, 642, 632, 623, 616, 604, 592, 579, 577, 569, 565, 565, 562, 556, 575, 665, 666, 670, 674, 674, 672, 665, 661, 663, 665, 669, 672, 675, 678, 679, 680, 683, 685, 687, 686, 688, 682, 680, 678, 674, 669, 663, 655, 646, 638, 631, 622, 613, 599, 595, 586, 577, 569, 565, 564, 560, 555, 553, 575, 649, 651, 656, 659, 659, 657, 654, 648, 648, 651, 656, 658, 662, 665, 663, 667, 670, 672, 671, 671, 670, 668, 666, 663, 659, 654, 648, 641, 635, 626, 619, 612, 603, 596, 588, 578, 570, 564, 564, 558, 554, 551, 550, 575, 635, 637, 640, 644, 643, 642, 640, 635, 633, 637, 641, 643, 645, 648, 649, 650, 654, 656, 656, 655, 654, 652, 649, 645, 641, 636, 632, 626, 620, 613, 608, 599, 594, 585, 578, 566, 564, 563, 556, 553, 551, 549, 549, 575, 622, 623, 626, 627, 627, 627, 624, 620, 618, 621, 625, 627, 628, 631, 634, 636, 638, 639, 639, 638, 638, 636, 633, 629, 624, 621, 616, 613, 607, 601, 596, 589, 582, 575, 563, 564, 561, 555, 552, 550, 548, 548, 548, 575, 608, 609, 610, 611, 610, 610, 610, 607, 605, 607, 608, 610, 612, 615, 618, 621, 621, 622, 622, 621, 620, 618, 616, 613, 610, 606, 602, 597, 591, 587, 584, 578, 566, 562, 564, 560, 555, 551, 548, 548, 547, 550, 547, 575, 593, 592, 592, 594, 594, 593, 593, 594, 593, 593, 592, 593, 594, 597, 600, 603, 605, 605, 606, 605, 602, 601, 599, 596, 594, 592, 588, 583, 578, 573, 569, 561, 563, 564, 558, 554, 551, 549, 547, 546, 551, 543, 543, 575, 579, 580, 580, 580, 580, 581, 582, 583, 582, 583, 581, 582, 582, 583, 585, 587, 590, 590, 591, 589, 587, 585, 582, 581, 580, 579, 575, 572, 566, 558, 562, 563, 559, 556, 553, 551, 549, 547, 547, 548, 543, 540, 539, 575, 573, 573, 572, 572, 573, 573, 574, 573, 573, 573, 571, 571, 573, 574, 575, 576, 576, 577, 576, 576, 576, 573, 571, 570, 569, 565, 559, 559, 561, 562, 558, 556, 554, 552, 550, 548, 547, 551, 542, 540, 538, 538, 539, 575, 563, 559, 560, 562, 563, 563, 564, 564, 563, 564, 561, 561, 562, 563, 565, 564, 565, 565, 566, 565, 564, 563, 559, 555, 557, 559, 560, 558, 556, 554, 553, 552, 550, 548, 547, 550, 543, 540, 538, 536, 538, 539, 538, 575, 555, 557, 556, 555, 557, 557, 558, 558, 556, 557, 557, 557, 556, 557, 558, 557, 557, 557, 557, 553, 551, 554, 556, 557, 555, 554, 552, 551, 551, 551, 549, 547, 547, 549, 542, 540, 537, 536, 537, 538, 538, 538, 538, 575, 550, 549, 549, 549, 550, 550, 552, 553, 552, 552, 553, 553, 551, 553, 553, 549, 548, 550, 552, 553, 553, 551, 550, 549, 549, 549, 548, 548, 548, 549, 549, 541, 541, 540, 539, 539, 537, 538, 538, 537, 536, 536, 536, 575, 546, 544, 545, 545, 545, 546, 547, 548, 548, 547, 545, 544, 546, 547, 548, 550, 550, 549, 549, 547, 547, 547, 546, 546, 546, 545, 548, 545, 540, 546, 541, 540, 540, 539, 539, 537, 537, 536, 536, 535, 535, 535, 535, 575, 539, 538, 538, 539, 539, 539, 540, 542, 543, 544, 545, 546, 546, 547, 546, 546, 545, 545, 544, 544, 545, 546, 545, 541, 540, 540, 541, 541, 542, 541, 538, 539, 538, 538, 537, 536, 536, 535, 535, 535, 535, 534, 534, 575, 540, 540, 540, 541, 541, 541, 541, 543, 543, 543, 543, 543, 542, 541, 542, 544, 544, 542, 539, 538, 540, 540, 540, 539, 538, 538, 538, 538, 537, 537, 536, 536, 536, 536, 534, 535, 534, 534, 534, 534, 534, 534, 533, 575, 536, 536, 537, 538, 536, 537, 538, 538, 540, 542, 541, 541, 539, 539, 540, 539, 538, 538, 537, 537, 537, 537, 537, 536, 536, 536, 536, 536, 535, 534, 534, 534, 533, 533, 532, 533, 533, 533, 533, 533, 533, 533, 532, 575, 534, 535, 536, 538, 538, 536, 536, 537, 537, 537, 536, 536, 536, 536, 536, 535, 535, 534, 534, 534, 534, 534, 534, 533, 533, 533, 533, 533, 532, 531, 532, 532, 532, 531, 531, 532, 532, 532, 532, 533, 532, 532, 531, 575, 531, 530, 531, 532, 531, 532, 533, 532, 533, 533, 533, 532, 533, 533, 533, 533, 533, 532, 532, 532, 532, 532, 532, 532, 532, 532, 531, 531, 531, 530, 530, 530, 529, 529, 530, 531, 531, 531, 531, 531, 531, 532, 531, 575, 527, 528, 528, 529, 528, 528, 530, 530, 530, 530, 530, 530, 531, 531, 530, 531, 531, 531, 530, 530, 530, 530, 530, 530, 530, 530, 530, 529, 529, 529, 529, 529, 528, 528, 529, 531, 529, 529, 531, 530, 530, 531, 530, 575, 526, 527, 528, 527, 526, 526, 527, 527, 527, 528, 528, 528, 528, 529, 528, 529, 529, 529, 529, 528, 528, 528, 528, 528, 528, 528, 529, 528, 528, 527, 527, 527, 527, 527, 529, 529, 528, 528, 529, 529, 529, 529, 530, 575, 524, 525, 524, 524, 524, 525, 525, 526, 526, 526, 526, 526, 526, 527, 527, 527, 527, 527, 527, 527, 527, 526, 527, 527, 527, 527, 528, 527, 527, 526, 526, 526, 526, 526, 526, 527, 527, 527, 527, 530, 528, 528, 527, 575, 522, 522, 523, 523, 523, 523, 524, 524, 524, 524, 524, 525, 525, 525, 526, 526, 526, 526, 526, 526, 525, 525, 527, 526, 526, 526, 527, 526, 526, 525, 525, 525, 525, 525, 525, 526, 526, 526, 526, 528, 527, 526, 526, 575, 521, 521, 522, 522, 522, 522, 523, 523, 523, 523, 523, 523, 524, 524, 525, 525, 525, 525, 525, 525, 524, 524, 524, 524, 525, 526, 526, 526, 525, 525, 525, 523, 525, 524, 525, 525, 525, 525, 526, 526, 524, 523, 524, 575, 520, 520, 520, 521, 520, 521, 521, 522, 522, 522, 522, 522, 523, 523, 524, 524, 524, 524, 523, 523, 523, 523, 523, 524, 525, 525, 525, 524, 524, 523, 524, 523, 520, 520, 526, 524, 524, 526, 526, 522, 524, 526, 526, 575, 519, 520, 520, 520, 520, 520, 521, 521, 521, 521, 521, 521, 522, 522, 522, 523, 523, 523, 523, 522, 523, 522, 522, 524, 524, 524, 524, 523, 523, 523, 523, 524, 523, 525, 522, 523, 524, 525, 524, 524, 525, 526, 527, 575, 519, 518, 519, 520, 518, 519, 520, 521, 520, 519, 520, 520, 520, 521, 521, 522, 522, 524, 522, 521, 522, 521, 522, 523, 523, 523, 523, 521, 522, 522, 522, 522, 527, 527, 524, 522, 524, 523, 524, 525, 526, 528, 527, 575, 518, 519, 518, 517, 517, 518, 519, 519, 519, 518, 519, 519, 520, 520, 521, 521, 521, 521, 521, 521, 520, 520, 521, 522, 522, 521, 521, 521, 522, 522, 520, 523, 524, 525, 524, 525, 524, 525, 526, 526, 527, 527, 528, 575, 516, 516, 516, 516, 516, 517, 517, 517, 517, 517, 518, 518, 519, 519, 519, 520, 520, 521, 520, 520, 517, 519, 520, 519, 520, 520, 520, 522, 522, 523, 524, 524, 525, 526, 525, 525, 525, 526, 526, 527, 528, 528, 529, 575, 515, 515, 515, 515, 515, 515, 515, 516, 516, 516, 517, 517, 517, 517, 518, 519, 519, 518, 519, 520, 518, 520, 519, 520, 520, 521, 522, 523, 523, 524, 525, 525, 526, 526, 526, 527, 527, 527, 527, 528, 529, 530, 530, 575, 514, 514, 516, 511, 512, 513, 514, 515, 516, 516, 516, 517, 517, 518, 517, 517, 517, 520, 517, 517, 519, 521, 522, 523, 520, 523, 522, 523, 524, 525, 526, 527, 528, 527, 528, 528, 528, 529, 529, 530, 531, 531, 532, 575, 512, 513, 512, 513, 514, 514, 514, 514, 515, 515, 516, 516, 516, 517, 517, 517, 518, 517, 518, 520, 521, 522, 524, 525, 525, 525, 524, 525, 525, 526, 527, 528, 529, 529, 530, 530, 530, 531, 531, 531, 532, 533, 534, 575, 513, 513, 514, 515, 515, 515, 516, 515, 515, 515, 516, 515, 516, 516, 517, 519, 520, 521, 520, 522, 523, 523, 525, 527, 527, 527, 527, 528, 528, 528, 528, 530, 530, 530, 530, 531, 532, 533, 533, 533, 534, 535, 536, 575, 514, 514, 514, 516, 517, 516, 517, 518, 517, 517, 518, 518, 518, 519, 519, 520, 522, 523, 523, 525, 524, 525, 527, 528, 528, 529, 529, 529, 529, 529, 529, 531, 531, 532, 531, 533, 534, 535, 535, 536, 537, 536, 537, 575],
+        },
+        drainage: [
+          { path: [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }, { x: 150, y: 0 }, { x: 200, y: 0 }, { x: 250, y: 0 }, { x: 300, y: 0 }, { x: 350, y: 0 }, { x: 400, y: 0 }, { x: 450, y: 0 }, { x: 500, y: 0 }, { x: 550, y: 0 }, { x: 600, y: 0 }, { x: 650, y: 0 }, { x: 700, y: 0 }, { x: 750, y: 0 }, { x: 800, y: 50 }, { x: 850, y: 50 }], drop: 35.6 },
+          { path: [{ x: 1200, y: 0 }, { x: 1150, y: 50 }, { x: 1100, y: 50 }, { x: 1050, y: 0 }, { x: 1000, y: 0 }, { x: 950, y: 0 }], drop: 17.2 },
+          { path: [{ x: 1400, y: 0 }, { x: 1450, y: 0 }, { x: 1500, y: 0 }, { x: 1550, y: 0 }, { x: 1600, y: 0 }, { x: 1650, y: 0 }, { x: 1700, y: 0 }, { x: 1750, y: 50 }, { x: 1800, y: 100 }, { x: 1850, y: 150 }, { x: 1900, y: 150 }, { x: 1950, y: 150 }, { x: 2000, y: 150 }, { x: 2050, y: 100 }, { x: 2100, y: 100 }, { x: 2150, y: 100 }], drop: 61.7 },
+          { path: [{ x: 2000, y: 0 }, { x: 2050, y: 0 }, { x: 2100, y: 50 }, { x: 2150, y: 50 }], drop: 32.3 },
+          { path: [{ x: 1200, y: 200 }, { x: 1150, y: 150 }, { x: 1100, y: 150 }, { x: 1050, y: 150 }, { x: 1000, y: 100 }], drop: 10.6 },
+          { path: [{ x: 1800, y: 400 }, { x: 1850, y: 450 }, { x: 1900, y: 500 }, { x: 1900, y: 550 }, { x: 1950, y: 600 }, { x: 2000, y: 650 }, { x: 2000, y: 700 }, { x: 2050, y: 750 }, { x: 2050, y: 800 }, { x: 2100, y: 850 }, { x: 2100, y: 900 }, { x: 2100, y: 950 }, { x: 2050, y: 1000 }], drop: 77.3 },
+          { path: [{ x: 0, y: 600 }, { x: 0, y: 650 }, { x: 0, y: 700 }, { x: 0, y: 750 }, { x: 0, y: 800 }, { x: 0, y: 850 }, { x: 0, y: 900 }, { x: 0, y: 950 }, { x: 0, y: 1000 }, { x: 0, y: 1050 }, { x: 0, y: 1100 }, { x: 0, y: 1150 }, { x: 50, y: 1200 }, { x: 50, y: 1250 }, { x: 100, y: 1250 }], drop: 144.1 },
+          { path: [{ x: 200, y: 600 }, { x: 200, y: 650 }, { x: 200, y: 700 }, { x: 200, y: 750 }, { x: 200, y: 800 }, { x: 200, y: 850 }, { x: 200, y: 900 }, { x: 200, y: 950 }, { x: 200, y: 1000 }, { x: 200, y: 1050 }, { x: 200, y: 1100 }, { x: 200, y: 1150 }, { x: 200, y: 1200 }, { x: 200, y: 1250 }], drop: 143.7 },
+          { path: [{ x: 1200, y: 600 }, { x: 1250, y: 650 }, { x: 1250, y: 700 }, { x: 1250, y: 750 }, { x: 1250, y: 800 }, { x: 1250, y: 850 }, { x: 1250, y: 900 }, { x: 1250, y: 950 }, { x: 1300, y: 1000 }, { x: 1350, y: 1050 }, { x: 1350, y: 1100 }, { x: 1350, y: 1150 }, { x: 1400, y: 1200 }], drop: 144.3 },
+          { path: [{ x: 1400, y: 600 }, { x: 1450, y: 650 }, { x: 1500, y: 700 }, { x: 1550, y: 750 }, { x: 1600, y: 800 }, { x: 1600, y: 850 }, { x: 1650, y: 850 }, { x: 1700, y: 900 }, { x: 1750, y: 950 }, { x: 1800, y: 1000 }, { x: 1850, y: 1050 }, { x: 1850, y: 1100 }], drop: 121.2 },
+          { path: [{ x: 1600, y: 600 }, { x: 1650, y: 650 }, { x: 1700, y: 700 }, { x: 1750, y: 750 }, { x: 1800, y: 800 }, { x: 1850, y: 850 }, { x: 1900, y: 850 }, { x: 1950, y: 900 }, { x: 2000, y: 950 }, { x: 2000, y: 1000 }, { x: 1950, y: 1050 }], drop: 87.3 },
+          { path: [{ x: 600, y: 800 }, { x: 600, y: 850 }, { x: 600, y: 900 }, { x: 600, y: 950 }, { x: 600, y: 1000 }, { x: 600, y: 1050 }, { x: 600, y: 1100 }, { x: 600, y: 1150 }, { x: 600, y: 1200 }, { x: 550, y: 1200 }], drop: 84.7 },
+          { path: [{ x: 800, y: 800 }, { x: 800, y: 850 }, { x: 800, y: 900 }, { x: 800, y: 950 }, { x: 800, y: 1000 }, { x: 800, y: 1050 }, { x: 800, y: 1100 }, { x: 800, y: 1150 }], drop: 91.0 },
+          { path: [{ x: 1000, y: 800 }, { x: 1000, y: 850 }, { x: 1000, y: 900 }, { x: 1000, y: 950 }, { x: 1000, y: 1000 }, { x: 1000, y: 1050 }, { x: 1000, y: 1100 }], drop: 86.8 },
+          { path: [{ x: 1200, y: 800 }, { x: 1200, y: 850 }, { x: 1200, y: 900 }, { x: 1200, y: 950 }, { x: 1200, y: 1000 }, { x: 1200, y: 1050 }, { x: 1250, y: 1100 }, { x: 1250, y: 1150 }, { x: 1250, y: 1200 }, { x: 1250, y: 1250 }, { x: 1250, y: 1300 }, { x: 1250, y: 1350 }, { x: 1250, y: 1400 }, { x: 1250, y: 1450 }, { x: 1250, y: 1500 }, { x: 1250, y: 1550 }, { x: 1250, y: 1600 }, { x: 1200, y: 1650 }, { x: 1150, y: 1700 }, { x: 1100, y: 1750 }, { x: 1050, y: 1800 }, { x: 1050, y: 1850 }, { x: 1050, y: 1900 }, { x: 1000, y: 1950 }], drop: 107.5 },
+          { path: [{ x: 1400, y: 800 }, { x: 1400, y: 850 }, { x: 1400, y: 900 }, { x: 1450, y: 950 }], drop: 49.3 },
+          { path: [{ x: 1400, y: 1000 }, { x: 1450, y: 1050 }, { x: 1500, y: 1100 }, { x: 1550, y: 1150 }, { x: 1600, y: 1200 }, { x: 1600, y: 1250 }, { x: 1650, y: 1300 }, { x: 1650, y: 1350 }, { x: 1650, y: 1400 }, { x: 1650, y: 1450 }, { x: 1650, y: 1500 }, { x: 1650, y: 1550 }, { x: 1650, y: 1600 }, { x: 1650, y: 1650 }, { x: 1650, y: 1700 }, { x: 1650, y: 1750 }], drop: 41.3 },
+        ],
+        roads: [
+          {
+            id: "hwy-59",
+            name: "Old Hwy 59",
+            type: "highway",
+            path: [{ x: -100, y: 1490 }, { x: 560, y: 1465 }, { x: 1670, y: 1455 }, { x: 2300, y: 1440 }],
+          },
+          {
+            id: "standpipe",
+            name: "Stand Pipe Rd",
+            type: "rural-road",
+            path: [{ x: 1970, y: 400 }, { x: 1955, y: 1460 }],
+          },
+        ],
+        zones: [
+          {
+            id: "existing-residence",
+            name: "Existing Structure",
+            kind: "structure",
+            polygon: [{ x: 1015, y: 990 }, { x: 1130, y: 990 }, { x: 1130, y: 1055 }, { x: 1015, y: 1055 }],
+            notes: "Approximate location of the existing structure visible in Google Earth at end of the driveway. Adjust polygon when exact footprint is known.",
+            subZones: [],
+          },
+          {
+            id: "family",
+            name: "Family Zone",
+            kind: "living",
+            polygon: [{ x: 956, y: 944 }, { x: 1196, y: 944 }, { x: 1196, y: 1264 }, { x: 956, y: 1264 }],
+            sunAspect: "S",
+            notes: "Underground house, food forest, garden, root cellar. South-facing slope for warmth.",
+            subZones: [
+              {
+                id: "underground-house",
+                name: "Underground House",
+                kind: "structure",
+                polygon: [{ x: 1016, y: 994 }, { x: 1136, y: 994 }, { x: 1136, y: 1094 }, { x: 1016, y: 1094 }],
+                notes: "Earth-sheltered, ~1,500-2,000 sq ft. 10K CEB blocks. Earth tube HVAC, integrated root cellar.",
+                subZones: [],
+              },
+              {
+                id: "food-forest",
+                name: "Food Forest",
+                kind: "garden",
+                polygon: [{ x: 956, y: 1114 }, { x: 1066, y: 1114 }, { x: 1066, y: 1254 }, { x: 956, y: 1254 }],
+                notes: "Fruit trees, berries, perennials. Warmest microclimate, S/SW exposure.",
+                subZones: [],
+              },
+              {
+                id: "garden",
+                name: "Annual Garden",
+                kind: "garden",
+                polygon: [{ x: 1076, y: 1114 }, { x: 1196, y: 1114 }, { x: 1196, y: 1254 }, { x: 1076, y: 1254 }],
+                notes: "Annual vegetables, herbs, market garden surplus crops.",
+                subZones: [],
+              },
+              {
+                id: "well-house",
+                name: "Well House",
+                kind: "structure",
+                polygon: [{ x: 1051, y: 954 }, { x: 1101, y: 954 }, { x: 1101, y: 989 }, { x: 1051, y: 989 }],
+                notes: "CEB walls (above ground only - CEB not submersion-rated). PVC primary well casing.",
+                subZones: [],
+              }
+            ],
+          },
+          {
+            id: "emu",
+            name: "Emu Zone",
+            kind: "livestock",
+            polygon: [{ x: 706, y: 864 }, { x: 936, y: 864 }, { x: 936, y: 1304 }, { x: 696, y: 1314 }],
+            sunAspect: "W",
+            notes: "West portion of parcel. Six breeding pens + shared off-season colony pen. Open ranging area.",
+            subZones: [
+              {
+                id: "emu-pen-1",
+                name: "Pair 1 — Workhorse (blonde♀ × standard♂)",
+                kind: "pen",
+                polygon: [{ x: 726, y: 894 }, { x: 816, y: 894 }, { x: 816, y: 964 }, { x: 726, y: 964 }],
+                notes: "Existing mated pair. Bonded, permanent. Source of meat-stock + black-selection foundation offspring.",
+                subZones: [],
+              },
+              {
+                id: "emu-pen-2",
+                name: "Pair 2 — Hybrid White/Blonde (adult blonde♂ + white♀)",
+                kind: "pen",
+                polygon: [{ x: 836, y: 894 }, { x: 926, y: 894 }, { x: 926, y: 964 }, { x: 836, y: 964 }],
+                notes: "White/blonde preservation hybrid pair. Forms once white female reaches breeding age (~2027-2028).",
+                subZones: [],
+              },
+              {
+                id: "emu-pen-3",
+                name: "Pair 3 — Pure White Preservation (future)",
+                kind: "pen-future",
+                polygon: [{ x: 726, y: 984 }, { x: 816, y: 984 }, { x: 816, y: 1054 }, { x: 726, y: 1054 }],
+                notes: "Forms when first visible white chick from Pair 2 reaches breeding age. Mate acquired from outside.",
+                subZones: [],
+              },
+              {
+                id: "emu-pen-4",
+                name: "Pair 4 — Standard Preservation",
+                kind: "pen-future",
+                polygon: [{ x: 836, y: 984 }, { x: 926, y: 984 }, { x: 926, y: 1054 }, { x: 836, y: 1054 }],
+                notes: "Unrelated standard × standard pair acquired at Heavener move (2029). $2K-4K.",
+                subZones: [],
+              },
+              {
+                id: "emu-pen-5",
+                name: "Pair 5 — Black-Selection Line A",
+                kind: "pen-future",
+                polygon: [{ x: 726, y: 1074 }, { x: 816, y: 1074 }, { x: 816, y: 1144 }, { x: 726, y: 1144 }],
+                notes: "Darkest male + female offspring from Pair 1. Long-game selection toward solid black.",
+                subZones: [],
+              },
+              {
+                id: "emu-pen-6",
+                name: "Pair 6 — Black-Selection Line B",
+                kind: "pen-future",
+                polygon: [{ x: 836, y: 1074 }, { x: 926, y: 1074 }, { x: 926, y: 1144 }, { x: 836, y: 1144 }],
+                notes: "Acquired darker-lineage pair, post-Heavener. Genetic redundancy for Line A.",
+                subZones: [],
+              },
+              {
+                id: "emu-colony",
+                name: "Off-Season Colony Pen (Apr-Sep)",
+                kind: "pen-shared",
+                polygon: [{ x: 716, y: 884 }, { x: 931, y: 884 }, { x: 931, y: 1284 }, { x: 711, y: 1294 }],
+                notes: "All 6 pairs colony together off-season. Sight barriers between pens lower during breeding (Oct-Mar).",
+                subZones: [],
+              }
+            ],
+          },
+          {
+            id: "chicken",
+            name: "Chicken Zone",
+            kind: "livestock",
+            polygon: [{ x: 1236, y: 894 }, { x: 1516, y: 894 }, { x: 1526, y: 1204 }, { x: 1236, y: 1204 }],
+            sunAspect: "E",
+            notes: "East portion of parcel. Morning sun for laying behavior. Phase 2 color-flock pens added incrementally.",
+            subZones: [
+              {
+                id: "chicken-coop-main",
+                name: "Main Barnyard Coop + Run",
+                kind: "structure",
+                polygon: [{ x: 1256, y: 914 }, { x: 1376, y: 914 }, { x: 1376, y: 1024 }, { x: 1256, y: 1024 }],
+                notes: "30-80 bird capacity. CEB walls. Phoenix bloodline base.",
+                subZones: [],
+              },
+              {
+                id: "chicken-meat-pen",
+                name: "Meat Bird Pen",
+                kind: "structure",
+                polygon: [{ x: 1396, y: 914 }, { x: 1496, y: 914 }, { x: 1496, y: 994 }, { x: 1396, y: 994 }],
+                notes: "20-30 grow-out birds per batch. Family-of-4 sized.",
+                subZones: [],
+              },
+              {
+                id: "color-flock-blue",
+                name: "Blue Flock — Cream Legbar",
+                kind: "pen-future",
+                polygon: [{ x: 1256, y: 1054 }, { x: 1331, y: 1054 }, { x: 1331, y: 1134 }, { x: 1256, y: 1134 }],
+                notes: "Phase 2. Acquire Cream Legbar pullet late 2026 / early 2027.",
+                subZones: [],
+              },
+              {
+                id: "color-flock-chocolate",
+                name: "Dark Chocolate Flock — Black Copper Marans",
+                kind: "pen-future",
+                polygon: [{ x: 1341, y: 1054 }, { x: 1426, y: 1054 }, { x: 1426, y: 1134 }, { x: 1341, y: 1134 }],
+                notes: "Phase 2. Existing Marans on property - just needs dedicated breeding pen.",
+                subZones: [],
+              },
+              {
+                id: "color-flock-olive",
+                name: "Olive Flock — Marans × Cream Legbar",
+                kind: "pen-future",
+                polygon: [{ x: 1436, y: 1054 }, { x: 1511, y: 1054 }, { x: 1511, y: 1134 }, { x: 1436, y: 1134 }],
+                notes: "Phase 2. Cross of two existing color flocks.",
+                subZones: [],
+              }
+            ],
+          },
+          {
+            id: "pond",
+            name: "Pond + Wetland",
+            kind: "water",
+            polygon: [{ x: 1296, y: 1234 }, { x: 1506, y: 1239 }, { x: 1526, y: 1394 }, { x: 1306, y: 1384 }],
+            sunAspect: "open",
+            notes: "SE low point catches drainage. Fire suppression, fish/duck habitat, irrigation source. Naturally lowest spot on the parcel.",
+            subZones: [],
+          },
+          {
+            id: "workshop",
+            name: "Workshop + Hydrovac Storage",
+            kind: "structure",
+            polygon: [{ x: 746, y: 1314 }, { x: 996, y: 1309 }, { x: 1001, y: 1419 }, { x: 746, y: 1424 }],
+            sunAspect: "N",
+            notes: "Near Petros Rd for driveway access - load and unload hydrovac without dragging trailer past house. Material yard adjacent.",
+            subZones: [
+              {
+                id: "shop",
+                name: "Fabrication Shop",
+                kind: "structure",
+                polygon: [{ x: 766, y: 1334 }, { x: 876, y: 1334 }, { x: 876, y: 1414 }, { x: 766, y: 1414 }],
+                notes: "Welding, hydrovac builds, beller v2, tool fabrication.",
+                subZones: [],
+              },
+              {
+                id: "hydrovac-storage",
+                name: "Hydrovac Trailer Bay",
+                kind: "structure",
+                polygon: [{ x: 886, y: 1334 }, { x: 986, y: 1334 }, { x: 986, y: 1414 }, { x: 886, y: 1414 }],
+                notes: "Covered drive-through. Prototype + builds 2/3 staging.",
+                subZones: [],
+              }
+            ],
+          },
+          {
+            id: "driveway",
+            name: "Driveway + Access",
+            kind: "path",
+            polygon: [{ x: 1040, y: 1050 }, { x: 1100, y: 1050 }, { x: 1110, y: 1460 }, { x: 1020, y: 1460 }],
+            notes: "Primary access from Petros Rd south side. Gravel until traffic justifies upgrade.",
+            subZones: [],
+          }
+        ],
+      };
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // FLAG TYPES — for annotation system
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      const FLAG_TYPE_META = {
+        issue:    { label: "Issue",        color: "#e85d4a", emoji: "🚩", desc: "Something that doesn't work — needs fixing" },
+        idea:     { label: "Idea",         color: "#f0b840", emoji: "💡", desc: "Suggestion or possible improvement" },
+        question: { label: "Question",     color: "#5da4d4", emoji: "❓", desc: "Need Claude to think about this" },
+        optimize: { label: "Optimize",     color: "#6ec07a", emoji: "✨", desc: "Could be better — efficiency target" },
+      };
+      const FLAG_TYPES = ["issue", "idea", "question", "optimize"];
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // THEME
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      const THEME = {
+        bg: "#0e1418",
+        bgSoft: "#1a2127",
+        panel: "rgba(20, 27, 32, 0.92)",
+        panelBorder: "rgba(140, 165, 140, 0.18)",
+        text: "#e6e2d5",
+        textSoft: "#9aa590",
+        accent: "#d4a04a",
+        accentDeep: "#a37a30",
+        sun: "#f0c878",
+        shadow: "#1e2520",
+        zoneLiving: "#d97844",
+        zoneLivestock: "#7da66a",
+        zoneStructure: "#8b7a5a",
+        zoneGarden: "#5e9a5a",
+        zoneWater: "#4a8aaf",
+        zonePath: "#a0928a",
+        boundary: "#e8c46c",
+        road: "#8a7a68",
+      };
+
+      const ZONE_COLOR_MAP = {
+        living: THEME.zoneLiving,
+        livestock: THEME.zoneLivestock,
+        pen: "#6a9258",
+        "pen-future": "#8aa886",
+        "pen-shared": "#c4a268",
+        structure: THEME.zoneStructure,
+        garden: THEME.zoneGarden,
+        water: THEME.zoneWater,
+        path: THEME.zonePath,
+      };
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // HELPERS
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      function getElevationAt(elev, x, y) {
+        if (!elev || !elev.values) return 0;
+        const col = Math.max(0, Math.min(elev.cols - 1, Math.round(x / elev.step)));
+        const row = Math.max(0, Math.min(elev.rows - 1, Math.round(y / elev.step)));
+        return elev.values[row * elev.cols + col];
+      }
+
+      // Bilinear interpolation for smoother elevation lookups (used by zones, paths)
+      function sampleElevation(elev, x, y) {
+        if (!elev || !elev.values) return 0;
+        const fc = x / elev.step;
+        const fr = y / elev.step;
+        const c0 = Math.max(0, Math.min(elev.cols - 1, Math.floor(fc)));
+        const c1 = Math.max(0, Math.min(elev.cols - 1, c0 + 1));
+        const r0 = Math.max(0, Math.min(elev.rows - 1, Math.floor(fr)));
+        const r1 = Math.max(0, Math.min(elev.rows - 1, r0 + 1));
+        const tx = fc - c0;
+        const ty = fr - r0;
+        const z00 = elev.values[r0 * elev.cols + c0];
+        const z10 = elev.values[r0 * elev.cols + c1];
+        const z01 = elev.values[r1 * elev.cols + c0];
+        const z11 = elev.values[r1 * elev.cols + c1];
+        const z0 = z00 * (1 - tx) + z10 * tx;
+        const z1 = z01 * (1 - tx) + z11 * tx;
+        return z0 * (1 - ty) + z1 * ty;
+      }
+
+      // Smooth a polygon's corners using CatmullRom interpolation
+      function smoothPolygon(points, segments = 24) {
+        if (!points || points.length < 3) return points || [];
+        const v3 = points.map((p) => new THREE.Vector3(p.x, 0, p.y));
+        const curve = new THREE.CatmullRomCurve3(v3, true, "catmullrom", 0.4);
+        const sampled = curve.getPoints(points.length * segments);
+        return sampled.map((p) => ({ x: p.x, y: p.z }));
+      }
+
+      function polygonCentroid(points) {
+        let sx = 0, sy = 0;
+        for (const p of points) { sx += p.x; sy += p.y; }
+        return { x: sx / points.length, y: sy / points.length };
+      }
+
+      // Check if a point is inside a polygon (ray casting)
+      function pointInPolygon(x, y, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i].x, yi = polygon[i].y;
+          const xj = polygon[j].x, yj = polygon[j].y;
+          const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+
+      // Color terrain by elevation + slope: low ground sage, mid slopes warm tan/brown, high ground darker green (woodland)
+      function terrainColorAt(elev, slope, eMin, eMax) {
+        const t = Math.max(0, Math.min(1, (elev - eMin) / (eMax - eMin)));
+        // Base color by elevation band
+        let r, g, b;
+        if (t < 0.25) {
+          // Wet bottomland → sage / olive
+          const u = t / 0.25;
+          r = 0.42 + u * 0.10;
+          g = 0.51 + u * 0.08;
+          b = 0.34 + u * 0.04;
+        } else if (t < 0.55) {
+          // Mid-slope grass / warm tan
+          const u = (t - 0.25) / 0.30;
+          r = 0.52 + u * 0.18;
+          g = 0.59 - u * 0.07;
+          b = 0.38 - u * 0.05;
+        } else if (t < 0.80) {
+          // Upper slope dry-grass to scrub
+          const u = (t - 0.55) / 0.25;
+          r = 0.70 - u * 0.12;
+          g = 0.52 - u * 0.10;
+          b = 0.33 - u * 0.05;
+        } else {
+          // Wooded hilltop
+          const u = (t - 0.80) / 0.20;
+          r = 0.58 - u * 0.24;
+          g = 0.42 - u * 0.05;
+          b = 0.28 - u * 0.10;
+        }
+        // Steep slopes get darker (exposed earth/rock)
+        const slopeFactor = Math.max(0, Math.min(1, slope / 0.6));
+        const darken = 1 - slopeFactor * 0.18;
+        r *= darken;
+        g *= darken * 0.97;
+        b *= darken * 0.94;
+        return [r, g, b];
+      }
+
+      // Compute slope magnitude at a grid cell
+      function slopeAt(elev, col, row) {
+        const v = elev.values;
+        const c0 = Math.max(0, col - 1);
+        const c1 = Math.min(elev.cols - 1, col + 1);
+        const r0 = Math.max(0, row - 1);
+        const r1 = Math.min(elev.rows - 1, row + 1);
+        const dzdx = (v[row * elev.cols + c1] - v[row * elev.cols + c0]) / ((c1 - c0) * elev.step);
+        const dzdy = (v[r1 * elev.cols + col] - v[r0 * elev.cols + col]) / ((r1 - r0) * elev.step);
+        return Math.sqrt(dzdx * dzdx + dzdy * dzdy);
+      }
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // VIEW PRESETS
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      const VIEW_PRESETS = {
+        aerial: {
+          label: "Aerial",
+          icon: "MapIcon",
+          pitch: 1.10,            // very steep down — close to top-down
+          yaw: Math.PI / 2,       // camera SOUTH of target, looking NORTH → north is up
+          distance: 2800,
+          fov: 35,
+          desc: "Top-down survey view of the entire property — north is up",
+        },
+        tour: {
+          label: "Tour",
+          icon: "Move3D",
+          pitch: 0.55,
+          yaw: Math.PI / 2,       // also north-up but at angle
+          distance: 1700,
+          fov: 50,
+          desc: "Angled flyover showing terrain relief — looking north",
+        },
+        onsite: {
+          label: "On-Site",
+          icon: "Eye",
+          pitch: 0.12,
+          yaw: Math.PI / 2,       // standing on the land looking north toward the hill
+          distance: 350,
+          fov: 70,
+          desc: "Ground-level — standing on the land, looking north",
+        },
+      };
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // MAIN COMPONENT
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      function HeavenerProperty3D({ currentUser, isAdmin }) {
+        const mountRef = useRef(null);
+        const sceneRef = useRef({});
+        const [data] = useState(DEFAULT_PROPERTY);
+        const [viewMode, setViewMode] = useState("aerial");
+        const [hoveredZone, setHoveredZone] = useState(null);
+        const [selectedZone, setSelectedZone] = useState(null);
+        const [contextMenu, setContextMenu] = useState(null); // { x, y, worldPos, zone }
+        const [showHelp, setShowHelp] = useState(false);
+        const [layers, setLayers] = useState({
+          zones: true,
+          boundary: true,
+          roads: true,
+          drainage: false,
+          labels: true,
+          forest: true,
+        });
+        const [cameraTarget, setCameraTarget] = useState({
+          x: data.meta.bounds.w / 2,
+          y: data.elevation.min,
+          z: data.meta.bounds.h / 2,
+        });
+        const [zonePath, setZonePath] = useState([]); // breadcrumb of nested zone IDs
+        const [flags, setFlags] = useState([]);
+        const [flagsLoaded, setFlagsLoaded] = useState(false);
+        const [flagModal, setFlagModal] = useState(null); // { worldPos, propX, propY, zone }
+        const [flagsPanelOpen, setFlagsPanelOpen] = useState(false);
+        const [exportOpen, setExportOpen] = useState(false);
+        const [selectedFlag, setSelectedFlag] = useState(null);
+        const [cameraYaw, setCameraYaw] = useState(Math.PI / 2);
+
+        // Vertical exaggeration for terrain dramatic effect
+        const Y_SCALE = 1.0;
+
+        // Set up Three.js scene
+        useEffect(() => {
+          if (!mountRef.current) return;
+          const mount = mountRef.current;
+          const width = mount.clientWidth;
+          const height = mount.clientHeight;
+
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(THEME.bg);
+          scene.fog = new THREE.Fog(THEME.bg, 1500, 5500);
+
+          const camera = new THREE.PerspectiveCamera(VIEW_PRESETS[viewMode].fov, width / height, 1, 8000);
+          const renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          renderer.setSize(width, height);
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          mount.appendChild(renderer.domElement);
+
+          // Lighting
+          const sun = new THREE.DirectionalLight(0xfff4e0, 1.1);
+          sun.position.set(-1500, 2200, -1200); // NW sun, fairly high
+          sun.target.position.set(data.meta.bounds.w / 2, data.elevation.min, data.meta.bounds.h / 2);
+          sun.castShadow = true;
+          sun.shadow.mapSize.set(2048, 2048);
+          sun.shadow.camera.left = -2000;
+          sun.shadow.camera.right = 2000;
+          sun.shadow.camera.top = 2000;
+          sun.shadow.camera.bottom = -2000;
+          sun.shadow.camera.near = 100;
+          sun.shadow.camera.far = 6000;
+          sun.shadow.bias = -0.0008;
+          scene.add(sun);
+          scene.add(sun.target);
+
+          const ambient = new THREE.HemisphereLight(0xb8d4e0, 0x3d3528, 0.42);
+          scene.add(ambient);
+
+          // ─── Terrain mesh ───
+          const elev = data.elevation;
+          const W = data.meta.bounds.w;
+          const H = data.meta.bounds.h;
+          const segX = elev.cols - 1;
+          const segZ = elev.rows - 1;
+          const terrainGeo = new THREE.PlaneGeometry(W, H, segX, segZ);
+          terrainGeo.rotateX(-Math.PI / 2);
+          // Move so corner (0,0) is at world (0,0,0)
+          terrainGeo.translate(W / 2, 0, H / 2);
+
+          const positions = terrainGeo.attributes.position;
+          const colors = new Float32Array(positions.count * 3);
+          // Vertices are laid out row-by-row from top (z=0) to bottom (z=H)
+          for (let i = 0; i < positions.count; i++) {
+            const col = i % elev.cols;
+            const row = Math.floor(i / elev.cols);
+            const z = elev.values[row * elev.cols + col];
+            positions.setY(i, (z - elev.min) * Y_SCALE);
+            const slope = slopeAt(elev, col, row);
+            const [r, g, b] = terrainColorAt(z, slope, elev.min, elev.max);
+            colors[i * 3] = r;
+            colors[i * 3 + 1] = g;
+            colors[i * 3 + 2] = b;
+          }
+          terrainGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+          terrainGeo.computeVertexNormals();
+
+          const terrainMat = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            roughness: 0.92,
+            metalness: 0.02,
+            flatShading: false,
+          });
+          const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+          terrain.receiveShadow = true;
+          terrain.castShadow = true;
+          scene.add(terrain);
+
+          // ─── Boundary outline (bright yellow tubed line) ───
+          const boundaryGroup = new THREE.Group();
+          boundaryGroup.name = "boundary";
+          const boundaryPts = data.meta.boundary;
+          const boundary3D = [];
+          // Resample the boundary at fine intervals so it follows terrain curves
+          for (let i = 0; i < boundaryPts.length; i++) {
+            const a = boundaryPts[i];
+            const b = boundaryPts[(i + 1) % boundaryPts.length];
+            const steps = 30;
+            for (let s = 0; s <= steps; s++) {
+              const t = s / steps;
+              const x = a.x + (b.x - a.x) * t;
+              const y = a.y + (b.y - a.y) * t;
+              const z = (sampleElevation(elev, x, y) - elev.min) * Y_SCALE + 3;
+              boundary3D.push(new THREE.Vector3(x, z, y));
+            }
+          }
+          const boundaryCurve = new THREE.CatmullRomCurve3(boundary3D, true);
+          const boundaryGeo = new THREE.TubeGeometry(boundaryCurve, 200, 4, 6, true);
+          const boundaryMat = new THREE.MeshStandardMaterial({
+            color: THEME.boundary,
+            emissive: THEME.boundary,
+            emissiveIntensity: 0.4,
+            roughness: 0.4,
+          });
+          const boundaryMesh = new THREE.Mesh(boundaryGeo, boundaryMat);
+          boundaryGroup.add(boundaryMesh);
+          scene.add(boundaryGroup);
+
+          // ─── Roads (ribbons draped on terrain) ───
+          const roadsGroup = new THREE.Group();
+          roadsGroup.name = "roads";
+          for (const road of data.roads) {
+            const isHighway = road.type === "highway";
+            const roadWidth = isHighway ? 22 : 14;
+            const points3D = [];
+            for (let i = 0; i < road.path.length - 1; i++) {
+              const a = road.path[i];
+              const b = road.path[i + 1];
+              const steps = 20;
+              for (let s = 0; s <= steps; s++) {
+                const t = s / steps;
+                const x = a.x + (b.x - a.x) * t;
+                const y = a.y + (b.y - a.y) * t;
+                const z = (sampleElevation(elev, x, y) - elev.min) * Y_SCALE + 1.5;
+                points3D.push(new THREE.Vector3(x, z, y));
+              }
+            }
+            if (points3D.length < 2) continue;
+            const curve = new THREE.CatmullRomCurve3(points3D);
+            const tubeGeo = new THREE.TubeGeometry(curve, 200, roadWidth / 2, 4, false);
+            const roadMat = new THREE.MeshStandardMaterial({
+              color: isHighway ? "#776351" : "#9c8870",
+              roughness: 0.85,
+              metalness: 0.05,
+            });
+            const roadMesh = new THREE.Mesh(tubeGeo, roadMat);
+            roadMesh.receiveShadow = true;
+            roadMesh.userData = { type: "road", roadId: road.id, roadName: road.name };
+            roadsGroup.add(roadMesh);
+          }
+          scene.add(roadsGroup);
+
+          // ─── Drainage flow paths (water-blue lines) ───
+          const drainageGroup = new THREE.Group();
+          drainageGroup.name = "drainage";
+          for (const d of data.drainage) {
+            if (!d.path || d.path.length < 2) continue;
+            const points3D = d.path.map((p) => {
+              const z = (sampleElevation(elev, p.x, p.y) - elev.min) * Y_SCALE + 2;
+              return new THREE.Vector3(p.x, z, p.y);
+            });
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(points3D);
+            const lineMat = new THREE.LineBasicMaterial({
+              color: THEME.zoneWater,
+              linewidth: 2,
+              transparent: true,
+              opacity: 0.7,
+            });
+            const line = new THREE.Line(lineGeo, lineMat);
+            drainageGroup.add(line);
+          }
+          scene.add(drainageGroup);
+
+          // ─── Zones (organic shapes draped on terrain, click-targets) ───
+          const zonesGroup = new THREE.Group();
+          zonesGroup.name = "zones";
+          const zoneMeshes = []; // for raycasting
+
+          function buildZoneMesh(zone, isSubZone = false, parentId = null) {
+            const smoothed = smoothPolygon(zone.polygon, 8);
+            if (smoothed.length < 3) return;
+            const shape = new THREE.Shape();
+            smoothed.forEach((p, i) => {
+              if (i === 0) shape.moveTo(p.x, p.y);
+              else shape.lineTo(p.x, p.y);
+            });
+            shape.closePath();
+            const geo = new THREE.ShapeGeometry(shape, 12);
+            // Drape on terrain
+            const pos = geo.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+              const x = pos.getX(i);
+              const y = pos.getY(i);
+              const z = (sampleElevation(elev, x, y) - elev.min) * Y_SCALE + 4;
+              pos.setZ(i, -z); // ShapeGeometry is in XY plane; we set Z then rotate
+            }
+            geo.rotateX(-Math.PI / 2);
+            const color = ZONE_COLOR_MAP[zone.kind] || "#888";
+            const mat = new THREE.MeshStandardMaterial({
+              color,
+              transparent: true,
+              opacity: zone.kind === "pen-future" ? 0.20 : 0.36,
+              roughness: 0.85,
+              side: THREE.DoubleSide,
+              depthWrite: false,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.userData = { type: "zone", zone, isSubZone, parentId };
+            zonesGroup.add(mesh);
+            zoneMeshes.push(mesh);
+
+            // Soft border ring
+            const ringPoints = smoothed.map((p) => {
+              const zHeight = (sampleElevation(elev, p.x, p.y) - elev.min) * Y_SCALE + 6;
+              return new THREE.Vector3(p.x, zHeight, p.y);
+            });
+            ringPoints.push(ringPoints[0]); // close
+            const ringGeo = new THREE.BufferGeometry().setFromPoints(ringPoints);
+            const ringMat = new THREE.LineBasicMaterial({
+              color,
+              transparent: true,
+              opacity: 0.7,
+              linewidth: 2,
+            });
+            const ringLine = new THREE.Line(ringGeo, ringMat);
+            zonesGroup.add(ringLine);
+          }
+
+          for (const zone of data.zones) {
+            buildZoneMesh(zone, false, null);
+            // Top-level zones get sub-zones too (lighter rendering)
+            for (const sub of zone.subZones || []) {
+              buildZoneMesh(sub, true, zone.id);
+            }
+          }
+          scene.add(zonesGroup);
+
+          // ─── Forest trees (dense canopy on the property) ───
+          const forestGroup = new THREE.Group();
+          forestGroup.name = "forest";
+          const TREE_MAX = 1500;
+          const trunkGeo = new THREE.CylinderGeometry(1.2, 2.4, 8, 5);
+          const coneGeoTall = new THREE.ConeGeometry(8, 32, 7);
+          const coneGeoMed = new THREE.ConeGeometry(10, 24, 7);
+          const trunkInst = new THREE.InstancedMesh(
+            trunkGeo,
+            new THREE.MeshStandardMaterial({ color: "#3b2a1c", roughness: 0.92 }),
+            TREE_MAX
+          );
+          const coneTallInst = new THREE.InstancedMesh(
+            coneGeoTall,
+            new THREE.MeshStandardMaterial({ color: "#2f5a3a", roughness: 0.88 }),
+            TREE_MAX
+          );
+          const coneMedInst = new THREE.InstancedMesh(
+            coneGeoMed,
+            new THREE.MeshStandardMaterial({ color: "#4a7050", roughness: 0.88 }),
+            TREE_MAX
+          );
+          trunkInst.castShadow = true;
+          coneTallInst.castShadow = true;
+          coneMedInst.castShadow = true;
+          const dummy = new THREE.Object3D();
+          const treeSpacing = 32;
+          const boundary = data.meta.boundary;
+          const bxs = boundary.map((p) => p.x);
+          const bys = boundary.map((p) => p.y);
+          const minX = Math.min(...bxs);
+          const maxX = Math.max(...bxs);
+          const minY = Math.min(...bys);
+          const maxY = Math.max(...bys);
+          // Quick-test: avoid placing trees inside cleared zones (driveway + existing residence)
+          function inClearedZone(x, y) {
+            for (const zone of data.zones) {
+              if (zone.id === "driveway" || zone.id === "existing-residence") {
+                if (pointInPolygon(x, y, zone.polygon)) return true;
+              }
+            }
+            return false;
+          }
+          let tallIdx = 0;
+          let medIdx = 0;
+          for (let gx = minX; gx < maxX; gx += treeSpacing) {
+            for (let gy = minY; gy < maxY; gy += treeSpacing) {
+              const x = gx + (Math.random() - 0.5) * treeSpacing * 0.65;
+              const y = gy + (Math.random() - 0.5) * treeSpacing * 0.65;
+              if (!pointInPolygon(x, y, boundary)) continue;
+              if (inClearedZone(x, y)) continue;
+              const ze = (sampleElevation(elev, x, y) - elev.min) * Y_SCALE;
+              const scale = 0.7 + Math.random() * 0.6;
+              const isTall = Math.random() < 0.55;
+              const useInst = isTall ? coneTallInst : coneMedInst;
+              const trunkH = 8 * scale;
+              const coneH = (isTall ? 32 : 24) * scale;
+              // Trunk
+              dummy.position.set(x, ze + trunkH / 2, y);
+              dummy.scale.set(scale * 0.8, scale, scale * 0.8);
+              dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+              dummy.updateMatrix();
+              if (tallIdx + medIdx < TREE_MAX) {
+                trunkInst.setMatrixAt(tallIdx + medIdx, dummy.matrix);
+              }
+              // Cone
+              dummy.position.set(x, ze + trunkH + coneH / 2 - 2, y);
+              dummy.scale.set(scale, scale, scale);
+              dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+              dummy.updateMatrix();
+              if (isTall && tallIdx < TREE_MAX) {
+                coneTallInst.setMatrixAt(tallIdx, dummy.matrix);
+                tallIdx++;
+              } else if (!isTall && medIdx < TREE_MAX) {
+                coneMedInst.setMatrixAt(medIdx, dummy.matrix);
+                medIdx++;
+              }
+            }
+          }
+          trunkInst.count = tallIdx + medIdx;
+          coneTallInst.count = tallIdx;
+          coneMedInst.count = medIdx;
+          trunkInst.instanceMatrix.needsUpdate = true;
+          coneTallInst.instanceMatrix.needsUpdate = true;
+          coneMedInst.instanceMatrix.needsUpdate = true;
+          forestGroup.add(trunkInst);
+          forestGroup.add(coneTallInst);
+          forestGroup.add(coneMedInst);
+          scene.add(forestGroup);
+
+          // Set initial camera position
+          const target = new THREE.Vector3(W / 2, 0, H / 2);
+          function setCameraFromPreset(presetName) {
+            const p = VIEW_PRESETS[presetName] || VIEW_PRESETS.aerial;
+            camera.fov = p.fov;
+            camera.updateProjectionMatrix();
+            const horiz = Math.cos(p.pitch) * p.distance;
+            const vert = Math.sin(p.pitch) * p.distance;
+            camera.position.set(
+              target.x + Math.cos(p.yaw) * horiz,
+              target.y + vert,
+              target.z + Math.sin(p.yaw) * horiz
+            );
+            camera.lookAt(target);
+          }
+          setCameraFromPreset(viewMode);
+
+          // ─── Camera controls — hand-rolled orbit ───
+          const controlsState = {
+            isDragging: false,
+            lastX: 0,
+            lastY: 0,
+            yaw: VIEW_PRESETS[viewMode].yaw,
+            pitch: VIEW_PRESETS[viewMode].pitch,
+            distance: VIEW_PRESETS[viewMode].distance,
+            target: target.clone(),
+            touchDist: null,
+          };
+
+          function updateCamera() {
+            const horiz = Math.cos(controlsState.pitch) * controlsState.distance;
+            const vert = Math.sin(controlsState.pitch) * controlsState.distance;
+            camera.position.set(
+              controlsState.target.x + Math.cos(controlsState.yaw) * horiz,
+              controlsState.target.y + vert,
+              controlsState.target.z + Math.sin(controlsState.yaw) * horiz
+            );
+            camera.lookAt(controlsState.target);
+          }
+
+          function onPointerDown(e) {
+            controlsState.isDragging = true;
+            controlsState.lastX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
+            controlsState.lastY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+            controlsState.dragStartX = controlsState.lastX;
+            controlsState.dragStartY = controlsState.lastY;
+            controlsState.dragMoved = false;
+          }
+          function onPointerMove(e) {
+            const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
+            const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+            if (!controlsState.isDragging || clientX === undefined) return;
+            const dx = clientX - controlsState.lastX;
+            const dy = clientY - controlsState.lastY;
+            if (Math.abs(clientX - controlsState.dragStartX) > 3 || Math.abs(clientY - controlsState.dragStartY) > 3) {
+              controlsState.dragMoved = true;
+            }
+            controlsState.yaw -= dx * 0.006;
+            controlsState.pitch = Math.max(0.04, Math.min(1.45, controlsState.pitch + dy * 0.005));
+            controlsState.lastX = clientX;
+            controlsState.lastY = clientY;
+            updateCamera();
+          }
+          function onPointerUp(e) {
+            const wasDragging = controlsState.isDragging;
+            const moved = controlsState.dragMoved;
+            controlsState.isDragging = false;
+            if (wasDragging && !moved) {
+              handleTap(e);
+            }
+          }
+          function onWheel(e) {
+            e.preventDefault();
+            const delta = e.deltaY * 0.001;
+            controlsState.distance = Math.max(80, Math.min(4500, controlsState.distance * (1 + delta)));
+            updateCamera();
+          }
+          function onTouchStart(e) {
+            if (e.touches.length === 1) {
+              onPointerDown(e);
+            } else if (e.touches.length === 2) {
+              controlsState.isDragging = false;
+              const dx = e.touches[0].clientX - e.touches[1].clientX;
+              const dy = e.touches[0].clientY - e.touches[1].clientY;
+              controlsState.touchDist = Math.sqrt(dx * dx + dy * dy);
+            }
+          }
+          function onTouchMove(e) {
+            e.preventDefault();
+            if (e.touches.length === 1 && controlsState.isDragging) {
+              onPointerMove(e);
+            } else if (e.touches.length === 2 && controlsState.touchDist != null) {
+              const dx = e.touches[0].clientX - e.touches[1].clientX;
+              const dy = e.touches[0].clientY - e.touches[1].clientY;
+              const newDist = Math.sqrt(dx * dx + dy * dy);
+              const ratio = controlsState.touchDist / newDist;
+              controlsState.distance = Math.max(80, Math.min(4500, controlsState.distance * ratio));
+              controlsState.touchDist = newDist;
+              updateCamera();
+            }
+          }
+          function onTouchEnd(e) {
+            if (e.touches.length === 0) {
+              controlsState.touchDist = null;
+              if (controlsState.isDragging) onPointerUp(e);
+            }
+          }
+
+          // ─── Raycasting on tap ───
+          const raycaster = new THREE.Raycaster();
+          const mouse = new THREE.Vector2();
+          function handleTap(e) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const cx = (e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX)) - rect.left;
+            const cy = (e.clientY ?? (e.changedTouches && e.changedTouches[0]?.clientY)) - rect.top;
+            mouse.x = (cx / rect.width) * 2 - 1;
+            mouse.y = -(cy / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            // First try zones
+            const zoneHits = raycaster.intersectObjects(zoneMeshes, false);
+            const terrainHits = raycaster.intersectObject(terrain, false);
+            if (zoneHits.length > 0) {
+              const hit = zoneHits[0];
+              const worldPos = hit.point.clone();
+              setContextMenu({
+                screenX: cx + rect.left,
+                screenY: cy + rect.top,
+                worldPos: { x: worldPos.x, z: worldPos.z, y: worldPos.y },
+                zone: hit.object.userData.zone,
+                isSubZone: hit.object.userData.isSubZone,
+                parentId: hit.object.userData.parentId,
+              });
+            } else if (terrainHits.length > 0) {
+              const hit = terrainHits[0];
+              const worldPos = hit.point.clone();
+              // Check which zone (if any) contains this XZ point
+              const px = worldPos.x;
+              const py = worldPos.z;
+              let foundZone = null;
+              let foundSubZone = null;
+              let foundParentId = null;
+              for (const zone of data.zones) {
+                if (pointInPolygon(px, py, zone.polygon)) {
+                  foundZone = zone;
+                  for (const sub of zone.subZones || []) {
+                    if (pointInPolygon(px, py, sub.polygon)) {
+                      foundSubZone = sub;
+                      foundParentId = zone.id;
+                      break;
+                    }
+                  }
+                  break;
+                }
+              }
+              const targetZone = foundSubZone || foundZone;
+              setContextMenu({
+                screenX: cx + rect.left,
+                screenY: cy + rect.top,
+                worldPos: { x: worldPos.x, z: worldPos.z, y: worldPos.y },
+                zone: targetZone,
+                isSubZone: !!foundSubZone,
+                parentId: foundParentId,
+                elev: sampleElevation(elev, px, py),
+              });
+            }
+          }
+
+          renderer.domElement.addEventListener("mousedown", onPointerDown);
+          window.addEventListener("mousemove", onPointerMove);
+          window.addEventListener("mouseup", onPointerUp);
+          renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
+          renderer.domElement.addEventListener("touchstart", onTouchStart, { passive: false });
+          renderer.domElement.addEventListener("touchmove", onTouchMove, { passive: false });
+          renderer.domElement.addEventListener("touchend", onTouchEnd);
+
+          // Resize handler
+          function onResize() {
+            const w = mount.clientWidth;
+            const h = mount.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+          }
+          window.addEventListener("resize", onResize);
+
+          // Save refs
+          sceneRef.current = {
+            scene,
+            camera,
+            renderer,
+            controlsState,
+            updateCamera,
+            setCameraFromPreset,
+            raycaster,
+            zoneMeshes,
+            terrain,
+            zonesGroup,
+            boundaryGroup,
+            roadsGroup,
+            drainageGroup,
+            forestGroup,
+          };
+
+          // Animation loop
+          let rafId;
+          function animate() {
+            rafId = requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+          }
+          animate();
+
+          // Cleanup
+          return () => {
+            cancelAnimationFrame(rafId);
+            window.removeEventListener("mousemove", onPointerMove);
+            window.removeEventListener("mouseup", onPointerUp);
+            window.removeEventListener("resize", onResize);
+            try { mount.removeChild(renderer.domElement); } catch (e) {}
+            renderer.dispose();
+            terrainGeo.dispose();
+            terrainMat.dispose();
+            boundaryGeo.dispose();
+            boundaryMat.dispose();
+          };
+        }, []); // setup once
+
+        // Apply view preset changes by smoothly tweening
+        useEffect(() => {
+          const refs = sceneRef.current;
+          if (!refs.controlsState) return;
+          const p = VIEW_PRESETS[viewMode];
+          const cs = refs.controlsState;
+          const startYaw = cs.yaw;
+          const startPitch = cs.pitch;
+          const startDist = cs.distance;
+          const startFov = refs.camera.fov;
+          const startTargetY = cs.target.y;
+          const targetTargetY = data.elevation.min + (viewMode === "onsite" ? 0 : 0);
+          const t0 = performance.now();
+          const duration = 800;
+          function tween() {
+            const t = Math.min(1, (performance.now() - t0) / duration);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            cs.yaw = startYaw + (p.yaw - startYaw) * ease;
+            cs.pitch = startPitch + (p.pitch - startPitch) * ease;
+            cs.distance = startDist + (p.distance - startDist) * ease;
+            cs.target.y = startTargetY + (targetTargetY - startTargetY) * ease;
+            refs.camera.fov = startFov + (p.fov - startFov) * ease;
+            refs.camera.updateProjectionMatrix();
+            refs.updateCamera();
+            if (t < 1) requestAnimationFrame(tween);
+          }
+          tween();
+        }, [viewMode, data.elevation.min]);
+
+        // Apply layer visibility
+        useEffect(() => {
+          const refs = sceneRef.current;
+          if (!refs.scene) return;
+          if (refs.zonesGroup) refs.zonesGroup.visible = layers.zones;
+          if (refs.boundaryGroup) refs.boundaryGroup.visible = layers.boundary;
+          if (refs.roadsGroup) refs.roadsGroup.visible = layers.roads;
+          if (refs.drainageGroup) refs.drainageGroup.visible = layers.drainage;
+          if (refs.forestGroup) refs.forestGroup.visible = layers.forest;
+        }, [layers]);
+
+        // ─── Poll camera yaw for the compass ───
+        useEffect(() => {
+          const id = setInterval(() => {
+            const refs = sceneRef.current;
+            if (refs.controlsState) {
+              const y = refs.controlsState.yaw;
+              setCameraYaw((prev) => (Math.abs(prev - y) > 0.01 ? y : prev));
+            }
+          }, 80);
+          return () => clearInterval(id);
+        }, []);
+
+        // ─── Flags: subscribe to Firestore for real-time collaboration ───
+        useEffect(() => {
+          if (!window.firebaseFlagSubscribe) {
+            setFlagsLoaded(true);
+            return;
+          }
+          const unsub = window.firebaseFlagSubscribe((firebaseFlags) => {
+            setFlags(firebaseFlags);
+            setFlagsLoaded(true);
+          });
+          return () => unsub && unsub();
+        }, []);
+
+        // ─── Flags: render as 3D pins on the terrain ───
+        useEffect(() => {
+          const refs = sceneRef.current;
+          if (!refs.scene) return;
+          // Remove previous flagsGroup
+          if (refs.flagsGroup) {
+            refs.scene.remove(refs.flagsGroup);
+            refs.flagsGroup.traverse((obj) => {
+              if (obj.geometry) obj.geometry.dispose();
+              if (obj.material) obj.material.dispose();
+            });
+          }
+          const flagsGroup = new THREE.Group();
+          flagsGroup.name = "flags";
+          const elev = data.elevation;
+          for (const flag of flags) {
+            const ze = (sampleElevation(elev, flag.x, flag.y) - elev.min) * Y_SCALE;
+            const color = FLAG_TYPE_META[flag.type]?.color || "#ccc";
+            // Pole
+            const poleGeo = new THREE.CylinderGeometry(1.5, 1.5, 50, 6);
+            const poleMat = new THREE.MeshStandardMaterial({ color: "#2a241c", roughness: 0.7 });
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.set(flag.x, ze + 25, flag.y);
+            flagsGroup.add(pole);
+            // Flag head (sphere)
+            const headGeo = new THREE.SphereGeometry(9, 12, 10);
+            const headMat = new THREE.MeshStandardMaterial({
+              color,
+              emissive: color,
+              emissiveIntensity: 0.5,
+              roughness: 0.45,
+            });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(flag.x, ze + 56, flag.y);
+            head.userData = { type: "flag", flagId: flag.id };
+            flagsGroup.add(head);
+            // Glow ring on the ground
+            const ringGeo = new THREE.RingGeometry(12, 18, 24);
+            const ringMat = new THREE.MeshBasicMaterial({
+              color,
+              transparent: true,
+              opacity: 0.4,
+              side: THREE.DoubleSide,
+              depthWrite: false,
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(flag.x, ze + 2, flag.y);
+            flagsGroup.add(ring);
+          }
+          refs.scene.add(flagsGroup);
+          refs.flagsGroup = flagsGroup;
+        }, [flags, data.elevation]);
+
+        // Add a new flag (Firestore — author auto-tagged from current user)
+        const addFlag = useCallback(async (type, note, propX, propY, zoneId, zoneName) => {
+          const newFlag = {
+            x: Math.round(propX),
+            y: Math.round(propY),
+            type,
+            note: note.trim(),
+            zoneId: zoneId || null,
+            zoneName: zoneName || null,
+            authorUid: currentUser?.uid || "anonymous",
+            authorName: currentUser?.displayName || currentUser?.email || "Unknown",
+            authorEmail: currentUser?.email || "",
+            createdAt: window.firebaseServerTimestamp(),
+          };
+          try {
+            await window.firebaseAddFlag(newFlag);
+            // No setFlags here — onSnapshot will update from Firestore
+          } catch (e) {
+            console.warn("flag save failed:", e);
+            alert("Failed to save flag: " + (e.message || "Unknown error"));
+          }
+          setFlagModal(null);
+        }, [currentUser]);
+
+        const deleteFlag = useCallback(async (id) => {
+          const flag = flags.find((f) => f.id === id);
+          if (!flag) return;
+          // Permission: only the author or admin can delete
+          if (!isAdmin && flag.authorUid !== currentUser?.uid) {
+            alert("You can only delete your own flags.");
+            return;
+          }
+          try {
+            await window.firebaseDeleteFlag(id);
+            // No setFlags — onSnapshot will update from Firestore
+          } catch (e) {
+            console.warn("flag delete failed:", e);
+            alert("Failed to delete flag: " + (e.message || "Unknown error"));
+          }
+        }, [flags, currentUser, isAdmin]);
+
+        // Zoom camera to a specific zone
+        const zoomToZone = useCallback((zone, parentId) => {
+          const refs = sceneRef.current;
+          if (!refs.controlsState) return;
+          const centroid = polygonCentroid(zone.polygon);
+          const elev = data.elevation;
+          const cz = (sampleElevation(elev, centroid.x, centroid.y) - elev.min) * 1.0;
+          // Estimate zone size
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          for (const p of zone.polygon) {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+          }
+          const zoneSize = Math.max(maxX - minX, maxY - minY);
+          const targetDist = Math.max(180, zoneSize * 1.6);
+          refs.controlsState.target.set(centroid.x, cz, centroid.y);
+          const startYaw = refs.controlsState.yaw;
+          const startPitch = refs.controlsState.pitch;
+          const startDist = refs.controlsState.distance;
+          const startTargetX = refs.controlsState.target.x;
+          const startTargetZ = refs.controlsState.target.z;
+          refs.controlsState.target.set(startTargetX, cz, startTargetZ);
+          const t0 = performance.now();
+          const duration = 900;
+          function tween() {
+            const t = Math.min(1, (performance.now() - t0) / duration);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            refs.controlsState.pitch = startPitch + (0.55 - startPitch) * ease;
+            refs.controlsState.distance = startDist + (targetDist - startDist) * ease;
+            refs.controlsState.target.x = startTargetX + (centroid.x - startTargetX) * ease;
+            refs.controlsState.target.z = startTargetZ + (centroid.y - startTargetZ) * ease;
+            refs.updateCamera();
+            if (t < 1) requestAnimationFrame(tween);
+          }
+          tween();
+          setSelectedZone({ zone, parentId });
+          if (parentId) setZonePath([parentId, zone.id]);
+          else setZonePath([zone.id]);
+        }, [data.elevation]);
+
+        const zoomToFlag = useCallback((flag) => {
+          const refs = sceneRef.current;
+          if (!refs.controlsState) return;
+          const elev = data.elevation;
+          const cz = (sampleElevation(elev, flag.x, flag.y) - elev.min) * 1.0;
+          const startTargetX = refs.controlsState.target.x;
+          const startTargetY = refs.controlsState.target.y;
+          const startTargetZ = refs.controlsState.target.z;
+          const startPitch = refs.controlsState.pitch;
+          const startDist = refs.controlsState.distance;
+          const t0 = performance.now();
+          const duration = 800;
+          function tween() {
+            const t = Math.min(1, (performance.now() - t0) / duration);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            refs.controlsState.target.x = startTargetX + (flag.x - startTargetX) * ease;
+            refs.controlsState.target.y = startTargetY + (cz - startTargetY) * ease;
+            refs.controlsState.target.z = startTargetZ + (flag.y - startTargetZ) * ease;
+            refs.controlsState.pitch = startPitch + (0.45 - startPitch) * ease;
+            refs.controlsState.distance = startDist + (400 - startDist) * ease;
+            refs.updateCamera();
+            if (t < 1) requestAnimationFrame(tween);
+          }
+          tween();
+          setSelectedFlag(flag);
+        }, [data.elevation]);
+
+        const dropOnSite = useCallback((worldPos) => {
+          const refs = sceneRef.current;
+          if (!refs.controlsState) return;
+          refs.controlsState.target.set(worldPos.x, worldPos.y, worldPos.z);
+          refs.controlsState.distance = 250;
+          refs.controlsState.pitch = 0.08;
+          refs.updateCamera();
+          setViewMode("onsite");
+        }, []);
+
+        // ─── Render ───
+        return (
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              height: "100vh",
+              background: THEME.bg,
+              color: THEME.text,
+              fontFamily: "'Manrope', -apple-system, sans-serif",
+              overflow: "hidden",
+            }}
+          >
+            <style>{`
+              @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+              * { box-sizing: border-box; }
+            `}</style>
+
+            {/* THREE.js mount */}
+            <div ref={mountRef} style={{ position: "absolute", inset: 0, cursor: "grab" }} />
+
+            {/* TOP BAR */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                padding: "14px 20px",
+                background: `linear-gradient(${THEME.panel}, rgba(20,27,32,0))`,
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                zIndex: 10,
+                pointerEvents: "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto" }}>
+                <Mountain size={22} color={THEME.accent} />
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: "-0.01em" }}>
+                    {data.meta.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: THEME.textSoft, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {data.meta.acres} ac · {Math.round(data.elevation.max - data.elevation.min)} ft relief · USGS LIDAR
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ flex: 1 }} />
+
+              <button
+                onClick={() => setFlagsPanelOpen(true)}
+                style={{
+                  ...btnStyle(),
+                  pointerEvents: "auto",
+                  background: flags.length > 0 ? `rgba(${flags.length > 0 ? "212,160,74" : "255,255,255"}, 0.15)` : "rgba(255,255,255,0.08)",
+                  color: flags.length > 0 ? THEME.accent : THEME.text,
+                  fontWeight: flags.length > 0 ? 700 : 500,
+                }}
+              >
+                <Flag size={13} /> notes
+                {flags.length > 0 && <span style={{ marginLeft: 2, opacity: 0.85 }}>· {flags.length}</span>}
+              </button>
+              <button
+                onClick={() => setExportOpen(true)}
+                style={{ ...btnStyle(), pointerEvents: "auto" }}
+                disabled={flags.length === 0}
+              >
+                <FileText size={13} /> export
+              </button>
+              <button
+                onClick={() => setShowHelp(true)}
+                style={{
+                  ...btnStyle(),
+                  pointerEvents: "auto",
+                }}
+              >
+                <Info size={13} /> guide
+              </button>
+            </div>
+
+            {/* VIEW MODE TOGGLE */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: 24,
+                left: "50%",
+                transform: "translateX(-50%)",
+                display: "flex",
+                gap: 6,
+                background: THEME.panel,
+                padding: 5,
+                borderRadius: 999,
+                border: `1px solid ${THEME.panelBorder}`,
+                zIndex: 10,
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              {Object.entries(VIEW_PRESETS).map(([key, preset]) => {
+                const Icon =
+                  preset.icon === "MapIcon" ? MapIcon :
+                  preset.icon === "Move3D" ? Move3D :
+                  Eye;
+                const active = viewMode === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setViewMode(key);
+                      setContextMenu(null);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 7,
+                      padding: "9px 16px",
+                      borderRadius: 999,
+                      border: "none",
+                      background: active ? THEME.accent : "transparent",
+                      color: active ? "#1a1410" : THEME.text,
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: active ? 700 : 500,
+                      transition: "all 0.2s",
+                      fontFamily: "inherit",
+                    }}
+                    title={preset.desc}
+                  >
+                    <Icon size={14} />
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* LAYERS PANEL */}
+            <div
+              style={{
+                position: "absolute",
+                top: 80,
+                right: 20,
+                background: THEME.panel,
+                border: `1px solid ${THEME.panelBorder}`,
+                borderRadius: 12,
+                padding: "12px 14px",
+                zIndex: 10,
+                minWidth: 150,
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <div style={{
+                fontSize: 9,
+                letterSpacing: "0.15em",
+                color: THEME.textSoft,
+                fontFamily: "'JetBrains Mono', monospace",
+                marginBottom: 10,
+                textTransform: "uppercase",
+              }}>
+                <Layers size={11} style={{ verticalAlign: -2, marginRight: 5 }} />
+                Layers
+              </div>
+              {[
+                { key: "zones", label: "Zones", icon: Home },
+                { key: "forest", label: "Forest", icon: Trees },
+                { key: "boundary", label: "Boundary", icon: Compass },
+                { key: "roads", label: "Roads", icon: ArrowLeft },
+                { key: "drainage", label: "Drainage", icon: Droplets },
+              ].map(({ key, label, icon: Ic }) => (
+                <button
+                  key={key}
+                  onClick={() => setLayers((l) => ({ ...l, [key]: !l[key] }))}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "6px 8px",
+                    marginBottom: 2,
+                    border: "none",
+                    background: "transparent",
+                    color: layers[key] ? THEME.text : THEME.textSoft,
+                    opacity: layers[key] ? 1 : 0.5,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    borderRadius: 6,
+                    fontFamily: "inherit",
+                    textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  {layers[key] ? <Eye size={12} /> : <EyeOff size={12} />}
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* CONTEXT MENU (tap popup) */}
+            {contextMenu && (
+              <div
+                style={{
+                  position: "fixed",
+                  left: Math.min(contextMenu.screenX, window.innerWidth - 240),
+                  top: Math.min(contextMenu.screenY, window.innerHeight - 200),
+                  background: THEME.panel,
+                  border: `1px solid ${THEME.panelBorder}`,
+                  borderRadius: 10,
+                  padding: 10,
+                  minWidth: 220,
+                  zIndex: 20,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                  backdropFilter: "blur(10px)",
+                  animation: "fadeIn 0.15s ease-out",
+                }}
+              >
+                <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: contextMenu.zone ? ZONE_COLOR_MAP[contextMenu.zone.kind] : THEME.textSoft }}>
+                    {contextMenu.zone ? contextMenu.zone.name : "Open ground"}
+                  </div>
+                  <button
+                    onClick={() => setContextMenu(null)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: THEME.textSoft,
+                      cursor: "pointer",
+                      padding: 2,
+                      display: "flex",
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                {contextMenu.zone && (
+                  <div style={{ fontSize: 11, color: THEME.textSoft, lineHeight: 1.5, marginBottom: 10 }}>
+                    {contextMenu.zone.notes}
+                  </div>
+                )}
+                {!contextMenu.zone && contextMenu.elev !== undefined && (
+                  <div style={{ fontSize: 11, color: THEME.textSoft, marginBottom: 10, fontFamily: "'JetBrains Mono', monospace" }}>
+                    elevation {Math.round(contextMenu.elev)} ft
+                  </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {contextMenu.zone && (
+                    <button
+                      onClick={() => {
+                        zoomToZone(contextMenu.zone, contextMenu.parentId);
+                        setContextMenu(null);
+                      }}
+                      style={menuBtnStyle()}
+                    >
+                      <Move3D size={13} /> Zoom in here
+                    </button>
+                  )}
+                  {contextMenu.zone && contextMenu.zone.subZones && contextMenu.zone.subZones.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setSelectedZone({ zone: contextMenu.zone, parentId: contextMenu.parentId });
+                        setContextMenu(null);
+                      }}
+                      style={menuBtnStyle()}
+                    >
+                      <Layers size={13} /> See {contextMenu.zone.subZones.length} sub-zones
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      dropOnSite(contextMenu.worldPos);
+                      setContextMenu(null);
+                    }}
+                    style={menuBtnStyle()}
+                  >
+                    <Eye size={13} /> Stand here (ground view)
+                  </button>
+                  {contextMenu.zone && (
+                    <button
+                      onClick={() => {
+                        setSelectedZone({ zone: contextMenu.zone, parentId: contextMenu.parentId });
+                        setContextMenu(null);
+                      }}
+                      style={menuBtnStyle()}
+                    >
+                      <Info size={13} /> Full details
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setFlagModal({
+                        propX: contextMenu.worldPos.x,
+                        propY: contextMenu.worldPos.z,
+                        zoneId: contextMenu.zone?.id,
+                        zoneName: contextMenu.zone?.name,
+                      });
+                      setContextMenu(null);
+                    }}
+                    style={{ ...menuBtnStyle(), borderColor: THEME.accent, color: THEME.accent }}
+                  >
+                    <Flag size={13} /> Flag this spot
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ZONE DETAILS PANEL */}
+            {selectedZone && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 80,
+                  left: 20,
+                  background: THEME.panel,
+                  border: `1px solid ${THEME.panelBorder}`,
+                  borderRadius: 12,
+                  padding: "16px 18px",
+                  zIndex: 10,
+                  maxWidth: 340,
+                  backdropFilter: "blur(8px)",
+                  animation: "fadeIn 0.25s ease-out",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: THEME.textSoft, marginBottom: 4 }}>
+                      {selectedZone.parentId ? "sub-zone" : "primary zone"}
+                    </div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: ZONE_COLOR_MAP[selectedZone.zone.kind] || THEME.text, lineHeight: 1.2 }}>
+                      {selectedZone.zone.name}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedZone(null); setZonePath([]); }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: THEME.textSoft,
+                      cursor: "pointer",
+                      padding: 4,
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: THEME.text, lineHeight: 1.55, marginBottom: 12 }}>
+                  {selectedZone.zone.notes}
+                </div>
+                {selectedZone.zone.sunAspect && (
+                  <div style={{ fontSize: 10, color: THEME.textSoft, fontFamily: "'JetBrains Mono', monospace", marginBottom: 12 }}>
+                    <Sun size={10} style={{ verticalAlign: -1, marginRight: 4 }} />
+                    sun aspect: {selectedZone.zone.sunAspect}
+                  </div>
+                )}
+                {selectedZone.zone.subZones && selectedZone.zone.subZones.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: THEME.textSoft, marginBottom: 6, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                      Sub-zones
+                    </div>
+                    {selectedZone.zone.subZones.map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => zoomToZone(sub, selectedZone.zone.id)}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          background: "rgba(255,255,255,0.04)",
+                          border: `1px solid ${THEME.panelBorder}`,
+                          color: THEME.text,
+                          padding: "8px 10px",
+                          marginBottom: 4,
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          fontSize: 12,
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.09)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+                      >
+                        <div style={{ fontWeight: 600, color: ZONE_COLOR_MAP[sub.kind] || THEME.text }}>
+                          {sub.name}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* HELP / GUIDE OVERLAY */}
+            {showHelp && (
+              <div
+                onClick={() => setShowHelp(false)}
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.6)",
+                  zIndex: 100,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 20,
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    background: THEME.bgSoft,
+                    border: `1px solid ${THEME.panelBorder}`,
+                    borderRadius: 14,
+                    padding: 28,
+                    maxWidth: 540,
+                    maxHeight: "85vh",
+                    overflowY: "auto",
+                    color: THEME.text,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>How to use this</div>
+                    <button
+                      onClick={() => setShowHelp(false)}
+                      style={{ background: "transparent", border: "none", color: THEME.text, cursor: "pointer", padding: 6 }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 13, lineHeight: 1.7, color: THEME.text }}>
+                    <p><strong style={{ color: THEME.accent }}>Three view modes</strong> — switch with the buttons at the bottom:</p>
+                    <ul style={{ marginLeft: 16, marginBottom: 14 }}>
+                      <li><strong>Aerial</strong> — top-down survey view of the whole parcel</li>
+                      <li><strong>Tour</strong> — angled flyover, shows relief</li>
+                      <li><strong>On-Site</strong> — drop the camera near ground level, look out across the land</li>
+                    </ul>
+
+                    <p><strong style={{ color: THEME.accent }}>Move around</strong></p>
+                    <ul style={{ marginLeft: 16, marginBottom: 14 }}>
+                      <li>Drag with mouse or finger to rotate</li>
+                      <li>Mouse wheel or pinch to zoom in/out</li>
+                      <li>Tap or click anywhere — terrain or a zone — to get options</li>
+                    </ul>
+
+                    <p><strong style={{ color: THEME.accent }}>Tap menu lets you</strong></p>
+                    <ul style={{ marginLeft: 16, marginBottom: 14 }}>
+                      <li>Zoom into a specific zone</li>
+                      <li>Stand at that spot (drops camera to ground view)</li>
+                      <li>Read the full notes for that zone</li>
+                      <li>Explore sub-zones (e.g. tap Emu Zone, see the 6 breeding pens)</li>
+                    </ul>
+
+                    <p><strong style={{ color: THEME.accent }}>What you're looking at</strong></p>
+                    <p>15.25 acres in Heavener, OK. Terrain is real — sampled from USGS 3DEP 2017 LIDAR at 1-meter resolution. Vertical exaggeration is 1.6× so the slope reads clearly. Your property drops about 120 ft from the highway at the north to Petros Rd at the south.</p>
+
+                    <p style={{ marginTop: 14, fontSize: 11, color: THEME.textSoft }}>
+                      Property boundary is approximate from the AcreValue plat — real survey coords would tighten the outline. Zones are placeholders to test against the terrain; drag-edit is coming.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FLAG ENTRY MODAL */}
+            {flagModal && (
+              <FlagEntryModal
+                modal={flagModal}
+                onSave={(type, note) =>
+                  addFlag(type, note, flagModal.propX, flagModal.propY, flagModal.zoneId, flagModal.zoneName)
+                }
+                onCancel={() => setFlagModal(null)}
+              />
+            )}
+
+            {/* FLAGS & NOTES PANEL */}
+            {flagsPanelOpen && (
+              <FlagsPanel
+                flags={flags}
+                data={data}
+                onClose={() => setFlagsPanelOpen(false)}
+                onZoomToFlag={(f) => {
+                  zoomToFlag(f);
+                  setFlagsPanelOpen(false);
+                }}
+                onDelete={deleteFlag}
+                currentUser={currentUser}
+                isAdmin={isAdmin}
+              />
+            )}
+
+            {/* EXPORT MODAL */}
+            {exportOpen && (
+              <ExportModal
+                flags={flags}
+                data={data}
+                onClose={() => setExportOpen(false)}
+              />
+            )}
+
+            {/* SELECTED FLAG TOOLTIP */}
+            {selectedFlag && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 100,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: THEME.panel,
+                  border: `1px solid ${FLAG_TYPE_META[selectedFlag.type]?.color || THEME.panelBorder}`,
+                  borderLeft: `4px solid ${FLAG_TYPE_META[selectedFlag.type]?.color}`,
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  maxWidth: 360,
+                  zIndex: 10,
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: FLAG_TYPE_META[selectedFlag.type]?.color, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                    {FLAG_TYPE_META[selectedFlag.type]?.emoji} {FLAG_TYPE_META[selectedFlag.type]?.label}
+                    {selectedFlag.zoneName && <span style={{ opacity: 0.7, marginLeft: 6 }}>· {selectedFlag.zoneName}</span>}
+                  </div>
+                  <button onClick={() => setSelectedFlag(null)} style={{ background: "transparent", border: "none", color: THEME.textSoft, cursor: "pointer", padding: 2 }}>
+                    <X size={14} />
+                  </button>
+                </div>
+                <div style={{ fontSize: 12.5, color: THEME.text, lineHeight: 1.5 }}>
+                  {selectedFlag.note}
+                </div>
+              </div>
+            )}
+
+            {/* COMPASS / NORTH INDICATOR — rotates to show true north */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: 24,
+                right: 20,
+                width: 56,
+                height: 56,
+                background: THEME.panel,
+                border: `1px solid ${THEME.panelBorder}`,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+              }}
+              title={`yaw ${(cameraYaw * 180 / Math.PI).toFixed(0)}°`}
+            >
+              <svg
+                width={40}
+                height={40}
+                viewBox="0 0 36 36"
+                style={{
+                  transform: `rotate(${(Math.PI / 2 - cameraYaw) * 180 / Math.PI}deg)`,
+                  transition: "transform 0.15s linear",
+                }}
+              >
+                <circle cx={18} cy={18} r={16} fill="none" stroke={THEME.textSoft} strokeWidth="0.5" opacity={0.4} />
+                {/* N - red arrow */}
+                <path d="M 18 3 L 21.5 18 L 18 16 L 14.5 18 Z" fill={THEME.accent} />
+                {/* S - faded */}
+                <path d="M 18 33 L 14.5 18 L 18 20 L 21.5 18 Z" fill={THEME.textSoft} opacity="0.4" />
+                {/* Cardinal letters - these stay in fixed orientation relative to north */}
+                <text x={18} y={3} textAnchor="middle" fontSize="4.5" fontWeight="700" fill={THEME.accent} fontFamily="monospace">N</text>
+                <text x={18} y={35.5} textAnchor="middle" fontSize="3.5" fill={THEME.textSoft} fontFamily="monospace">S</text>
+                <text x={34.5} y={19.5} textAnchor="middle" fontSize="3.5" fill={THEME.textSoft} fontFamily="monospace">E</text>
+                <text x={1.5} y={19.5} textAnchor="middle" fontSize="3.5" fill={THEME.textSoft} fontFamily="monospace">W</text>
+              </svg>
+            </div>
+          </div>
+        );
+      }
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // STYLE HELPERS
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      function btnStyle() {
+        return {
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          padding: "6px 11px",
+          background: "rgba(255,255,255,0.08)",
+          border: `1px solid ${THEME.panelBorder}`,
+          color: THEME.text,
+          borderRadius: 6,
+          cursor: "pointer",
+          fontSize: 11,
+          fontFamily: "inherit",
+        };
+      }
+
+      function menuBtnStyle() {
+        return {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 10px",
+          background: "rgba(255,255,255,0.05)",
+          border: `1px solid ${THEME.panelBorder}`,
+          color: THEME.text,
+          borderRadius: 6,
+          cursor: "pointer",
+          fontSize: 12,
+          fontFamily: "inherit",
+          textAlign: "left",
+          width: "100%",
+          transition: "background 0.15s",
+        };
+      }
+
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // FLAG ENTRY MODAL
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      function FlagEntryModal({ modal, onSave, onCancel }) {
+        const [type, setType] = useState("idea");
+        const [note, setNote] = useState("");
+        const canSave = note.trim().length > 0;
+        return (
+          <div
+            onClick={onCancel}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: THEME.bgSoft,
+                border: `1px solid ${THEME.panelBorder}`,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 460,
+                width: "100%",
+                color: THEME.text,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 17, fontWeight: 700 }}>Add a note</div>
+                <button onClick={onCancel} style={{ background: "transparent", border: "none", color: THEME.text, cursor: "pointer", padding: 4 }}>
+                  <X size={18} />
+                </button>
+              </div>
+              {modal.zoneName && (
+                <div style={{ fontSize: 11, color: THEME.textSoft, marginBottom: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+                  at <span style={{ color: THEME.accent }}>{modal.zoneName}</span> · ({Math.round(modal.propX)}, {Math.round(modal.propY)})
+                </div>
+              )}
+              {!modal.zoneName && (
+                <div style={{ fontSize: 11, color: THEME.textSoft, marginBottom: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+                  at open ground · ({Math.round(modal.propX)}, {Math.round(modal.propY)})
+                </div>
+              )}
+
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10, color: THEME.textSoft, marginBottom: 7, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>
+                  Type
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {FLAG_TYPES.map((t) => {
+                    const meta = FLAG_TYPE_META[t];
+                    const active = type === t;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setType(t)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "9px 12px",
+                          background: active ? meta.color : "rgba(255,255,255,0.04)",
+                          border: `1px solid ${active ? meta.color : THEME.panelBorder}`,
+                          color: active ? "#1a1410" : THEME.text,
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontWeight: active ? 700 : 500,
+                          fontFamily: "inherit",
+                          textAlign: "left",
+                          transition: "all 0.15s",
+                        }}
+                        title={meta.desc}
+                      >
+                        <span style={{ fontSize: 14 }}>{meta.emoji}</span>
+                        {meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, color: THEME.textSoft, marginBottom: 7, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>
+                  Note
+                </div>
+                <textarea
+                  autoFocus
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="What's the issue, idea, or question?"
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255,255,255,0.05)",
+                    border: `1px solid ${THEME.panelBorder}`,
+                    color: THEME.text,
+                    padding: "10px 12px",
+                    fontSize: 13,
+                    borderRadius: 6,
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  onClick={onCancel}
+                  style={{
+                    padding: "9px 16px",
+                    background: "transparent",
+                    border: `1px solid ${THEME.panelBorder}`,
+                    color: THEME.text,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => canSave && onSave(type, note)}
+                  disabled={!canSave}
+                  style={{
+                    padding: "9px 16px",
+                    background: canSave ? THEME.accent : "rgba(255,255,255,0.1)",
+                    border: "none",
+                    color: canSave ? "#1a1410" : THEME.textSoft,
+                    borderRadius: 6,
+                    cursor: canSave ? "pointer" : "not-allowed",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Save note
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // FLAGS & NOTES PANEL
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      function FlagsPanel({ flags, data, onClose, onZoomToFlag, onDelete, currentUser, isAdmin }) {
+        const byType = useMemo(() => {
+          const m = {};
+          for (const f of flags) {
+            if (!m[f.type]) m[f.type] = [];
+            m[f.type].push(f);
+          }
+          return m;
+        }, [flags]);
+        return (
+          <div
+            onClick={onClose}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.4)",
+              zIndex: 150,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: THEME.bgSoft,
+                borderLeft: `1px solid ${THEME.panelBorder}`,
+                width: "min(440px, 100%)",
+                height: "100%",
+                padding: "22px 24px",
+                color: THEME.text,
+                overflowY: "auto",
+                boxShadow: "-8px 0 32px rgba(0,0,0,0.4)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 19, fontWeight: 700 }}>Notes & Flags</div>
+                  <div style={{ fontSize: 11, color: THEME.textSoft, marginTop: 2 }}>
+                    {flags.length === 0 ? "no notes yet" : `${flags.length} note${flags.length === 1 ? "" : "s"} · tap to revisit`}
+                  </div>
+                </div>
+                <button onClick={onClose} style={{ background: "transparent", border: "none", color: THEME.text, cursor: "pointer", padding: 4 }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              {flags.length === 0 ? (
+                <div style={{
+                  padding: "32px 16px",
+                  textAlign: "center",
+                  border: `1px dashed ${THEME.panelBorder}`,
+                  borderRadius: 8,
+                  color: THEME.textSoft,
+                  fontSize: 12.5,
+                  lineHeight: 1.7,
+                }}>
+                  <Flag size={28} color={THEME.textSoft} style={{ marginBottom: 10 }} />
+                  <div style={{ marginBottom: 8 }}>No notes flagged yet.</div>
+                  <div style={{ fontSize: 11 }}>
+                    Tap anywhere on the terrain or a zone → choose <strong style={{ color: THEME.accent }}>Flag this spot</strong> to add a note.
+                  </div>
+                </div>
+              ) : (
+                FLAG_TYPES.filter((t) => byType[t]).map((t) => {
+                  const meta = FLAG_TYPE_META[t];
+                  return (
+                    <div key={t} style={{ marginBottom: 18 }}>
+                      <div style={{
+                        fontSize: 10,
+                        letterSpacing: "0.14em",
+                        color: meta.color,
+                        fontFamily: "'JetBrains Mono', monospace",
+                        textTransform: "uppercase",
+                        marginBottom: 8,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}>
+                        <span style={{ fontSize: 13 }}>{meta.emoji}</span> {meta.label} · {byType[t].length}
+                      </div>
+                      {byType[t].map((flag) => (
+                        <div
+                          key={flag.id}
+                          style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: `1px solid ${THEME.panelBorder}`,
+                            borderLeft: `3px solid ${meta.color}`,
+                            padding: "10px 12px",
+                            borderRadius: 6,
+                            marginBottom: 6,
+                          }}
+                        >
+                          {flag.zoneName && (
+                            <div style={{ fontSize: 10, color: THEME.accent, marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>
+                              {flag.zoneName}
+                            </div>
+                          )}
+                          <div style={{ fontSize: 12.5, color: THEME.text, lineHeight: 1.5, marginBottom: 6 }}>
+                            {flag.note}
+                          </div>
+                          {flag.authorName && (
+                            <div style={{ fontSize: 10, color: THEME.textSoft, marginBottom: 8, fontStyle: "italic" }}>
+                              — {flag.authorName}{flag.authorUid === currentUser?.uid ? " (you)" : ""}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <button
+                              onClick={() => onZoomToFlag(flag)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 5,
+                                padding: "5px 9px",
+                                background: "rgba(255,255,255,0.06)",
+                                border: `1px solid ${THEME.panelBorder}`,
+                                color: THEME.text,
+                                borderRadius: 5,
+                                cursor: "pointer",
+                                fontSize: 11,
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              <Move3D size={11} /> go to
+                            </button>
+                            {(isAdmin || flag.authorUid === currentUser?.uid) && (
+                              <button
+                                onClick={() => onDelete(flag.id)}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 5,
+                                  padding: "5px 9px",
+                                  background: "rgba(255,255,255,0.04)",
+                                  border: `1px solid ${THEME.panelBorder}`,
+                                  color: THEME.textSoft,
+                                  borderRadius: 5,
+                                  cursor: "pointer",
+                                  fontSize: 11,
+                                  fontFamily: "inherit",
+                                }}
+                              >
+                                <Trash2 size={11} /> delete
+                              </button>
+                            )}
+                            <div style={{ flex: 1 }} />
+                            <div style={{ fontSize: 9.5, color: THEME.textSoft, fontFamily: "'JetBrains Mono', monospace" }}>
+                              ({flag.x}, {flag.y})
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // ─────────────────────────────────────────────────────────────────────────────
+      // EXPORT MODAL — generates markdown for Claude review
+      // ─────────────────────────────────────────────────────────────────────────────
+
+      function ExportModal({ flags, data, onClose }) {
+        const [copied, setCopied] = useState(false);
+        const markdown = useMemo(() => {
+          if (flags.length === 0) return "(no notes yet — flag some spots in the viewer first)";
+          const elev = data.elevation;
+          const lines = [];
+          lines.push(`# Heavener Property — Layout Review Notes`);
+          lines.push("");
+          lines.push(`From the 3D property viewer. ${flags.length} note${flags.length === 1 ? "" : "s"} flagged.`);
+          lines.push("");
+          lines.push(`- **Property:** ${data.meta.acres} acres at ${data.meta.address}`);
+          lines.push(`- **Elevation range:** ${elev.min}–${elev.max} ft (${elev.max - elev.min} ft relief)`);
+          lines.push("");
+          // Group by zone for context
+          const byZone = {};
+          const openGround = [];
+          for (const f of flags) {
+            if (f.zoneId) {
+              if (!byZone[f.zoneId]) byZone[f.zoneId] = { name: f.zoneName, flags: [] };
+              byZone[f.zoneId].flags.push(f);
+            } else {
+              openGround.push(f);
+            }
+          }
+          lines.push(`## Notes by zone`);
+          lines.push("");
+          for (const zoneId of Object.keys(byZone)) {
+            const z = byZone[zoneId];
+            lines.push(`### ${z.name}`);
+            lines.push("");
+            for (const f of z.flags) {
+              const meta = FLAG_TYPE_META[f.type];
+              const elevHere = Math.round(sampleElevation(elev, f.x, f.y));
+              lines.push(`- ${meta.emoji} **${meta.label}** — *(${f.x}, ${f.y}) ~${elevHere} ft*`);
+              lines.push(`  > ${f.note.split("\n").join("\n  > ")}`);
+              lines.push("");
+            }
+          }
+          if (openGround.length > 0) {
+            lines.push(`### Open ground (no zone)`);
+            lines.push("");
+            for (const f of openGround) {
+              const meta = FLAG_TYPE_META[f.type];
+              const elevHere = Math.round(sampleElevation(elev, f.x, f.y));
+              lines.push(`- ${meta.emoji} **${meta.label}** — *(${f.x}, ${f.y}) ~${elevHere} ft*`);
+              lines.push(`  > ${f.note.split("\n").join("\n  > ")}`);
+              lines.push("");
+            }
+          }
+          lines.push(`---`);
+          lines.push(`*Generated ${new Date().toLocaleString()}. Paste this into Claude chat for layout review.*`);
+          return lines.join("\n");
+        }, [flags, data]);
+
+        const copyToClipboard = useCallback(async () => {
+          try {
+            await navigator.clipboard.writeText(markdown);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } catch (e) {
+            console.warn("clipboard write failed:", e);
+          }
+        }, [markdown]);
+
+        return (
+          <div
+            onClick={onClose}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: THEME.bgSoft,
+                border: `1px solid ${THEME.panelBorder}`,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 720,
+                width: "100%",
+                maxHeight: "85vh",
+                display: "flex",
+                flexDirection: "column",
+                color: THEME.text,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>Export for Claude review</div>
+                  <div style={{ fontSize: 11, color: THEME.textSoft, marginTop: 3 }}>
+                    Copy this markdown and paste it into your chat with Claude. Claude can then propose layout revisions based on your notes.
+                  </div>
+                </div>
+                <button onClick={onClose} style={{ background: "transparent", border: "none", color: THEME.text, cursor: "pointer", padding: 4 }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <textarea
+                readOnly
+                value={markdown}
+                style={{
+                  flex: 1,
+                  minHeight: 280,
+                  background: "rgba(0,0,0,0.3)",
+                  border: `1px solid ${THEME.panelBorder}`,
+                  color: THEME.text,
+                  padding: "12px 14px",
+                  fontSize: 12,
+                  borderRadius: 6,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  lineHeight: 1.55,
+                  resize: "vertical",
+                  outline: "none",
+                }}
+              />
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+                <button
+                  onClick={onClose}
+                  style={{
+                    padding: "9px 16px",
+                    background: "transparent",
+                    border: `1px solid ${THEME.panelBorder}`,
+                    color: THEME.text,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={copyToClipboard}
+                  disabled={flags.length === 0}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "9px 16px",
+                    background: copied ? "#6ec07a" : (flags.length === 0 ? "rgba(255,255,255,0.1)" : THEME.accent),
+                    border: "none",
+                    color: flags.length === 0 ? THEME.textSoft : "#1a1410",
+                    borderRadius: 6,
+                    cursor: flags.length === 0 ? "not-allowed" : "pointer",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  <Copy size={13} />
+                  {copied ? "Copied!" : "Copy to clipboard"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+
+      // ─── Auth wrapper ───
+      function AppShell() {
+        const [user, setUser] = useState(null);
+        const [authLoading, setAuthLoading] = useState(true);
+        const [authError, setAuthError] = useState(null);
+
+        useEffect(() => {
+          const unsub = window.firebaseOnAuthChange((u) => {
+            setUser(u);
+            setAuthLoading(false);
+          });
+          return () => unsub && unsub();
+        }, []);
+
+        const handleSignIn = async () => {
+          setAuthError(null);
+          try {
+            await window.firebaseSignIn();
+          } catch (e) {
+            setAuthError(e.message || "Sign-in failed");
+          }
+        };
+
+        const handleSignOut = async () => {
+          try {
+            await window.firebaseSignOut();
+          } catch (e) {
+            console.warn("sign-out failed:", e);
+          }
+        };
+
+        if (authLoading) {
+          return <div className="loading">Loading...</div>;
+        }
+
+        if (!user) {
+          return (
+            <div className="auth-screen">
+              <div className="auth-card">
+                <h1>Heavener Property Tool</h1>
+                <p>Interactive 3D property layout with collaborative flag annotations. Sign in with Google to view the property and add your own flags.</p>
+                <button className="auth-btn" onClick={handleSignIn}>
+                  <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                  Sign in with Google
+                </button>
+                {authError && <div className="auth-error">{authError}</div>}
+              </div>
+            </div>
+          );
+        }
+
+        // Authenticated — show the main app with user bar
+        const isAdmin = user.email === window.ADMIN_EMAIL;
+        return (
+          <>
+            <div className="user-bar">
+              <span className="user-name">{user.displayName || user.email}</span>
+              {isAdmin && <span className="user-admin">admin</span>}
+              <button onClick={handleSignOut}>Sign out</button>
+            </div>
+            <HeavenerProperty3D currentUser={user} isAdmin={isAdmin} />
+          </>
+        );
+      }
+
+      // Mount
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<AppShell />);
+    }
+
+    if (window.firebaseReady) {
+      mountApp();
+    } else {
+      window.addEventListener("firebase-ready", mountApp);
+    }
+  </script>
+</body>
+</html>
