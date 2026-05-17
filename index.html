@@ -3277,7 +3277,8 @@
         userRole,
         onSignOut,
         notesUnreadCount,
-        flagsUnreadCount
+        flagsUnreadCount,
+        planConcernsBadge
       }) {
         const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
         const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
@@ -3303,6 +3304,9 @@
               >
                 <span className="sidebar-item-icon-mobile">📖</span>
                 <span>Plan</span>
+                {planConcernsBadge > 0 && (
+                  <span className="sidebar-item-badge">{planConcernsBadge}</span>
+                )}
               </button>
               {canSeeNotes && (
                 <button
@@ -3376,6 +3380,9 @@
         const [emailLinkSent, setEmailLinkSent] = useState(false);
         const [emailLinkError, setEmailLinkError] = useState(null);
         const [completingEmailLink, setCompletingEmailLink] = useState(false);
+        const [planConcerns, setPlanConcerns] = useState([]);
+        const [openConcernForm, setOpenConcernForm] = useState(null);
+        const [concernFormText, setConcernFormText] = useState("");
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -3447,6 +3454,14 @@
               ).length;
               setNotesUnreadCount(unread);
             }
+          });
+          return () => unsub();
+        }, [user, isAllowed]);
+
+        useEffect(() => {
+          if (!user || !isAllowed) return;
+          const unsub = window.firebasePlanConcernsSubscribe((concerns) => {
+            setPlanConcerns(concerns);
           });
           return () => unsub();
         }, [user, isAllowed]);
@@ -3594,6 +3609,45 @@
           }
         };
 
+        const handlePostConcern = async (anchorHash, anchorContext) => {
+          if (!concernFormText.trim()) return;
+          await window.firebaseAddPlanConcern({
+            anchorHash,
+            anchorContext: anchorContext.slice(0, 100),
+            concernText: concernFormText.trim(),
+            authorUid: user.uid,
+            authorName: user.displayName || user.email,
+            authorEmail: user.email,
+            createdAt: window.firebaseServerTimestamp(),
+            resolved: false,
+            resolvedAt: null,
+            resolvedBy: null,
+          });
+          setConcernFormText("");
+          setOpenConcernForm(null);
+        };
+
+        const handleResolveConcern = async (concernId) => {
+          await window.firebaseUpdatePlanConcern(concernId, {
+            resolved: true,
+            resolvedAt: window.firebaseServerTimestamp(),
+            resolvedBy: user.email,
+          });
+        };
+
+        const handleUnresolveConcern = async (concernId) => {
+          await window.firebaseUpdatePlanConcern(concernId, {
+            resolved: false,
+            resolvedAt: null,
+            resolvedBy: null,
+          });
+        };
+
+        const handleDeleteConcern = async (concernId) => {
+          if (!confirm("Delete this concern?")) return;
+          await window.firebaseDeletePlanConcern(concernId);
+        };
+
         if (authLoading) {
           return <div className="loading">Loading...</div>;
         }
@@ -3656,6 +3710,9 @@
 
         // Authenticated — show the main app with sidebar navigation
         const isAdmin = user.email === window.ADMIN_EMAIL;
+        const unresolvedConcernsCount = isAdmin
+          ? planConcerns.filter(c => !c.resolved).length
+          : 0;
         return (
           <>
             <Sidebar
@@ -3668,6 +3725,7 @@
               onSignOut={handleSignOut}
               notesUnreadCount={notesUnreadCount}
               flagsUnreadCount={flagsUnreadCount}
+              planConcernsBadge={unresolvedConcernsCount}
             />
             <div className={`main-content section-${activeSection}`}>
               {activeSection === 'map' && ['admin', 'family', 'friend'].includes(userRole) && (
