@@ -231,6 +231,50 @@
     .notes-reply-post:disabled { background: #444; color: #888; cursor: not-allowed; }
     .notes-reply-cancel { background: transparent; color: #999; border: 1px solid #333 !important; }
     .notes-replies { margin-top: 8px; }
+
+    .labor-flags-section { margin: 28px 0; }
+    .labor-flags-title { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+    .labor-flags-intro { color: #aaa; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+    .labor-flag-card { background: #1a1a1a; border: 2px solid; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+    .labor-flag-card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }
+    .labor-flag-card.status-ACTIVE { border-color: #ef4444; }
+    .labor-flag-card.status-IN_PROGRESS { border-color: #d4a04a; }
+    .labor-flag-card.status-RESOLVED { border-color: #22c55e; opacity: 0.75; }
+    .labor-flag-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .labor-flag-id { font-weight: 700; color: #fff; font-size: 14px; }
+    .labor-flag-status { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .labor-flag-status.status-ACTIVE { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .labor-flag-status.status-IN_PROGRESS { background: rgba(212, 160, 74, 0.2); color: #d4a04a; }
+    .labor-flag-status.status-RESOLVED { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .labor-flag-card-title { color: #ddd; font-size: 14px; line-height: 1.4; }
+    .labor-flag-card-hint { color: #666; font-size: 11px; margin-top: 6px; font-style: italic; }
+
+    .labor-flag-panel-backdrop { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; max-width: 95vw; z-index: 1100; background: #161616; border-left: 1px solid #2a2a2a; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; transform: translateX(0); transition: transform 0.25s ease; }
+    .labor-flag-panel-minimized { transform: translateX(calc(100% - 36px)); }
+    .labor-flag-panel-header { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid #2a2a2a; }
+    .labor-flag-panel-id { font-weight: 700; color: #fff; font-size: 15px; }
+    .labor-flag-panel-spacer { flex: 1; }
+    .labor-flag-panel-btn { background: transparent; border: none; color: #999; font-size: 18px; cursor: pointer; width: 28px; height: 28px; border-radius: 4px; }
+    .labor-flag-panel-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+    .labor-flag-panel-tab { position: absolute; left: 0; top: 14px; width: 36px; height: 60px; background: #161616; border: 1px solid #2a2a2a; border-right: none; border-radius: 8px 0 0 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transform: translateX(-100%); color: #ef4444; font-weight: 700; font-size: 11px; }
+    .labor-flag-panel-tab:hover { background: #1f1f1f; }
+    .labor-flag-panel-body { flex: 1; overflow-y: auto; padding: 18px; }
+    .labor-flag-panel-section { margin-bottom: 18px; }
+    .labor-flag-panel-section-title { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .labor-flag-panel-section-body { color: #ddd; font-size: 13.5px; line-height: 1.55; }
+    .labor-flag-panel-title { font-size: 17px; font-weight: 600; color: #fff; margin-bottom: 14px; }
+    .labor-flag-notes-section { margin-top: 24px; border-top: 1px solid #2a2a2a; padding-top: 16px; }
+    .labor-flag-note-compose { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .labor-flag-note-compose textarea { background: #0f0f0f; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; color: #e8e8e8; font-size: 13px; font-family: inherit; min-height: 60px; resize: vertical; }
+    .labor-flag-note-compose textarea:focus { outline: none; border-color: #d4a04a; }
+    .labor-flag-note-compose button { align-self: flex-start; padding: 6px 14px; background: #d4a04a; color: #1a1a1a; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .labor-flag-note-compose button:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .labor-flag-note { background: #1a1a1a; border: 1px solid #262626; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+    .labor-flag-note-meta { display: flex; gap: 8px; font-size: 11px; color: #888; margin-bottom: 4px; }
+    .labor-flag-note-author { color: #d8d8d8; }
+    .labor-flag-note-body { color: #ddd; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+    .labor-flag-note-delete { background: transparent; border: none; color: #888; cursor: pointer; font-size: 11px; padding: 2px 4px; margin-top: 4px; }
+    .labor-flag-note-delete:hover { color: #ef4444; }
   </style>
 </head>
 <body>
@@ -311,6 +355,20 @@
     window.firebaseDeleteNote = (id) => deleteDoc(doc(db, "family_notes", id));
     window.firebaseNotesSubscribe = (cb) => {
       const q = query(collection(db, "family_notes"), orderBy("createdAt", "asc"));
+      return onSnapshot(q, (snapshot) => {
+        const notes = snapshot.docs.map(d => ({
+          ...d.data(),
+          id: d.id,
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        }));
+        cb(notes);
+      });
+    };
+
+    window.firebaseAddLaborFlagNote = (data) => addDoc(collection(db, "labor_flag_notes"), data);
+    window.firebaseDeleteLaborFlagNote = (id) => deleteDoc(doc(db, "labor_flag_notes", id));
+    window.firebaseLaborFlagNotesSubscribe = (cb) => {
+      const q = query(collection(db, "labor_flag_notes"), orderBy("createdAt", "asc"));
       return onSnapshot(q, (snapshot) => {
         const notes = snapshot.docs.map(d => ({
           ...d.data(),
@@ -2785,6 +2843,83 @@
         );
       }
 
+      // ─── Labor flags (hardcoded structured data; markdown plan is canonical) ───
+      const LABOR_FLAGS = [
+        {
+          id: "L-01",
+          title: "Pellet mill batch operation",
+          status: "ACTIVE",
+          concern: "Running the pellet mill 1-2 days per month requires loading raw biomass, monitoring output, bagging or silo-loading pellets. Currently manual.",
+          actionRequired: "Design auto-feed hopper system + automated pellet silo loading at the end of the line. Eliminates the 1-2 day batch effort down to a setup + walk-away pattern.",
+          suggestedApproach: "Use shop sawdust auger feed hardware (cheap, off-the-shelf) for hopper feed; gravity drop from pellet mill outlet into silo. Once configured, batch runs unattended.",
+          priority: "Address before pellet line becomes operational at Heavener (~2030).",
+        },
+        {
+          id: "L-02",
+          title: "Daily animal feeding & watering",
+          status: "ACTIVE",
+          concern: "Chickens (multiple breeds), emus (standard + blonde + white), plus future BSFL system. Daily manual feeding rounds + water check.",
+          actionRequired: "Design auto-feeders sized for both chickens and emus (already on the Tool Blueprint Catalog — items 2 and 3). Auto-water with rainwater header tank + ball valve refills.",
+          suggestedApproach: "Emu feeder is already priority #2 in the tool catalog — design it with daily labor reduction as the primary success metric, not just market viability.",
+          priority: "Tool design 2026-2027; install at Heavener at move-in (2029).",
+        },
+        {
+          id: "L-03",
+          title: "Coop bedding management",
+          status: "ACTIVE",
+          concern: "Cleaning out coop bedding, hauling to compost or pellet line. Currently manual shovel and wheelbarrow.",
+          actionRequired: "Design deep-litter compost-in-place system with one annual cleanout — OR — design a rolling-floor coop that auto-discharges bedding into a transport cart.",
+          suggestedApproach: "Deep-litter is simpler; rolling-floor is a higher-value blueprint product. Pick the path that doubles as a sellable tool.",
+          priority: "Solve before 2029 move so coop design at Heavener incorporates the chosen approach.",
+        },
+        {
+          id: "L-04",
+          title: "CEB block handling for underground house",
+          status: "ACTIVE",
+          concern: "Moving ~10,000 CEB blocks from press location to wall placement. Even with hydrovac making the blocks, manual transport is a lot of weight.",
+          actionRequired: "Design a small powered block transport cart — or a conveyor system that runs from press output to staging.",
+          suggestedApproach: "Cheap electric utility cart (used golf cart bed retrofit) handles 95% of cases. Buy used, modify, save engineering time. Save the engineered conveyor for the next CEB build.",
+          priority: "Resolve before underground house ground break (Sept 2029).",
+        },
+        {
+          id: "L-05",
+          title: "Bamboo harvest at scale",
+          status: "ACTIVE",
+          concern: "Once bamboo grove matures (~2031+), seasonal harvest of ~15 tons/year of fresh culms. Manual cutting with hand tools is significant work.",
+          actionRequired: "Design a bamboo-specific harvester. Could be derivative of the Mini-Bine drum cutter or a chainsaw-based handheld feeder system.",
+          suggestedApproach: "The Mini-Bine drum cutter approach with shorter, heavier drums is likely the right form factor for woody stems. Engineering work needed.",
+          priority: "Not urgent (harvest doesn't start until ~2031), but should be designed and prototyped during 2029-2030 buildout while shop is active.",
+        },
+        {
+          id: "L-06",
+          title: "Greenhouse harvest at scale",
+          status: "ACTIVE",
+          concern: "Picking 1 acre of greenhouse produce daily at peak season. Even with the modular grow units, harvest itself is hands-on.",
+          actionRequired: "Design crop-specific harvest tools (microgreen cutter, herb shears with collection, mushroom auto-cycler) and/or rolling harvest carts with built-in sorting.",
+          suggestedApproach: "Greenhouse automation blueprints already in the catalog (item 5) — design with harvest labor reduction as a primary success metric for each crop module.",
+          priority: "Resolve as each module is built (2030-2032).",
+        },
+        {
+          id: "L-07",
+          title: "Snow / storm cleanup at Heavener",
+          status: "ACTIVE",
+          concern: "Oklahoma winters bring ice storms; storm debris cleanup is real ongoing work.",
+          actionRequired: "Integrate storm debris directly into the pellet line as biomass — fallen branches become fuel, not yard work. Design the cleanup pipeline so it's drag-to-chipper rather than drag-to-brush-pile-and-burn.",
+          suggestedApproach: "A small towed chipper-trailer (Mini-Bine variant?) that hooks to the truck or zero-turn, chips on-site, dumps into pellet line input hopper. Storm cleanup becomes free fuel production.",
+          priority: "Design 2030; deploy first significant winter at Heavener.",
+        },
+        {
+          id: "L-08",
+          title: "Sand battery initial load",
+          status: "RESOLVED",
+          resolvedDate: "May 2026",
+          concern: "Moving 30 tons of sand into the insulated steel tank — brutal one-time labor if done manually.",
+          actionRequired: "Integrated into hydrovac trailer scheduling. The hydrovac already excavates and moves bulk material. Sand battery build window is scheduled during 2030-2031 when one or both hydrovac trailers are on-property between sales.",
+          suggestedApproach: "No additional tool design needed; no manual sand handling required. Just schedule the sand battery build during hydrovac availability.",
+          priority: "Lesson: some labor flags don't need new tools — they need scheduling integration with existing equipment.",
+        },
+      ];
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
@@ -2802,6 +2937,10 @@
         const [replyingTo, setReplyingTo] = useState(null);
         const [replyBody, setReplyBody] = useState("");
         const [notesUnreadCount, setNotesUnreadCount] = useState(0);
+        const [openLaborFlag, setOpenLaborFlag] = useState(null);
+        const [laborFlagPanelMinimized, setLaborFlagPanelMinimized] = useState(false);
+        const [laborFlagNotes, setLaborFlagNotes] = useState([]);
+        const [laborFlagNoteBody, setLaborFlagNoteBody] = useState("");
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -2854,6 +2993,14 @@
         }, [notesOpen]);
 
         useEffect(() => {
+          if (!user || !isAllowed) return;
+          const unsub = window.firebaseLaborFlagNotesSubscribe((notes) => {
+            setLaborFlagNotes(notes);
+          });
+          return () => unsub();
+        }, [user, isAllowed]);
+
+        useEffect(() => {
           if (!notesOpen) return;
           const handleEsc = (e) => { if (e.key === 'Escape') setNotesOpen(false); };
           window.addEventListener('keydown', handleEsc);
@@ -2892,6 +3039,24 @@
         const handleDeleteNote = async (id) => {
           if (!confirm("Delete this note?")) return;
           await window.firebaseDeleteNote(id);
+        };
+
+        const handlePostLaborFlagNote = async () => {
+          if (!laborFlagNoteBody.trim() || !openLaborFlag) return;
+          await window.firebaseAddLaborFlagNote({
+            flagId: openLaborFlag.id,
+            body: laborFlagNoteBody.trim(),
+            authorUid: user.uid,
+            authorName: user.displayName || user.email,
+            authorEmail: user.email,
+            createdAt: window.firebaseServerTimestamp(),
+          });
+          setLaborFlagNoteBody("");
+        };
+
+        const handleDeleteLaborFlagNote = async (id) => {
+          if (!confirm("Delete this note?")) return;
+          await window.firebaseDeleteLaborFlagNote(id);
         };
 
         const relativeTime = (iso) => {
@@ -2987,9 +3152,47 @@
                   <div className="plan-content">
                     {planLoading && <div className="plan-loading">Loading farm plan…</div>}
                     {planError && <div className="plan-error">Couldn't load plan: {planError}</div>}
-                    {planContent && (
-                      <div dangerouslySetInnerHTML={{ __html: window.marked.parse(planContent) }} />
-                    )}
+                    {planContent && (() => {
+                      const laborFlagsRegex = /(\n## 🚩 Labor Flags[\s\S]*?)(?=\n## |\n# |$)/;
+                      const match = planContent.match(laborFlagsRegex);
+                      const renderFlags = () => (
+                        <div className="labor-flags-section">
+                          <div className="labor-flags-title">🚩 Labor Flags</div>
+                          <div className="labor-flags-intro">
+                            Items requiring recurring physical labor that should be reduced via tool design. Tap any flag to see details and add notes.
+                          </div>
+                          {LABOR_FLAGS.map(flag => (
+                            <div key={flag.id}
+                                 className={`labor-flag-card status-${flag.status.replace(' ', '_')}`}
+                                 onClick={() => { setOpenLaborFlag(flag); setLaborFlagPanelMinimized(false); }}>
+                              <div className="labor-flag-card-header">
+                                <span className="labor-flag-id">🚩 {flag.id}</span>
+                                <span className={`labor-flag-status status-${flag.status.replace(' ', '_')}`}>{flag.status}</span>
+                              </div>
+                              <div className="labor-flag-card-title">{flag.title}</div>
+                              <div className="labor-flag-card-hint">Tap for details and notes →</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                      if (!match) {
+                        return (
+                          <>
+                            {renderFlags()}
+                            <div dangerouslySetInnerHTML={{ __html: window.marked.parse(planContent) }} />
+                          </>
+                        );
+                      }
+                      const before = planContent.slice(0, match.index);
+                      const after = planContent.slice(match.index + match[0].length);
+                      return (
+                        <>
+                          <div dangerouslySetInnerHTML={{ __html: window.marked.parse(before) }} />
+                          {renderFlags()}
+                          <div dangerouslySetInnerHTML={{ __html: window.marked.parse(after) }} />
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -3105,6 +3308,85 @@
                             );
                           })}
                       </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {openLaborFlag && (
+              <div className={`labor-flag-panel-backdrop${laborFlagPanelMinimized ? ' labor-flag-panel-minimized' : ''}`}>
+                {laborFlagPanelMinimized && (
+                  <div className="labor-flag-panel-tab"
+                       onClick={() => setLaborFlagPanelMinimized(false)}>
+                    {openLaborFlag.id}
+                  </div>
+                )}
+                <div className="labor-flag-panel-header">
+                  <span className="labor-flag-panel-id">🚩 {openLaborFlag.id}</span>
+                  <span className={`labor-flag-status status-${openLaborFlag.status.replace(' ', '_')}`}>
+                    {openLaborFlag.status}
+                  </span>
+                  <div className="labor-flag-panel-spacer" />
+                  <button className="labor-flag-panel-btn"
+                          title="Minimize"
+                          onClick={() => setLaborFlagPanelMinimized(true)}>–</button>
+                  <button className="labor-flag-panel-btn"
+                          title="Close"
+                          onClick={() => { setOpenLaborFlag(null); setLaborFlagNoteBody(""); }}>×</button>
+                </div>
+                <div className="labor-flag-panel-body">
+                  <div className="labor-flag-panel-title">{openLaborFlag.title}</div>
+                  <div className="labor-flag-panel-section">
+                    <div className="labor-flag-panel-section-title">The Concern</div>
+                    <div className="labor-flag-panel-section-body">{openLaborFlag.concern}</div>
+                  </div>
+                  <div className="labor-flag-panel-section">
+                    <div className="labor-flag-panel-section-title">Action Required</div>
+                    <div className="labor-flag-panel-section-body">{openLaborFlag.actionRequired}</div>
+                  </div>
+                  <div className="labor-flag-panel-section">
+                    <div className="labor-flag-panel-section-title">Suggested Approach</div>
+                    <div className="labor-flag-panel-section-body">{openLaborFlag.suggestedApproach}</div>
+                  </div>
+                  <div className="labor-flag-panel-section">
+                    <div className="labor-flag-panel-section-title">Priority / Lesson</div>
+                    <div className="labor-flag-panel-section-body">{openLaborFlag.priority}</div>
+                  </div>
+                  <div className="labor-flag-notes-section">
+                    <div className="labor-flag-panel-section-title">Notes & Alternative Ideas</div>
+                    <div className="labor-flag-note-compose">
+                      <textarea
+                        placeholder="Add a note — disagree with the suggestion, add context, propose an alternative..."
+                        value={laborFlagNoteBody}
+                        onChange={(e) => setLaborFlagNoteBody(e.target.value)}
+                      />
+                      <button onClick={handlePostLaborFlagNote} disabled={!laborFlagNoteBody.trim()}>Add note</button>
+                    </div>
+                    {laborFlagNotes.filter(n => n.flagId === openLaborFlag.id).length === 0 ? (
+                      <div style={{color: '#666', fontSize: 12, fontStyle: 'italic', padding: '8px 0'}}>No notes yet.</div>
+                    ) : (
+                      laborFlagNotes
+                        .filter(n => n.flagId === openLaborFlag.id)
+                        .map(note => {
+                          const canDelete = isAdmin || note.authorUid === user.uid;
+                          return (
+                            <div key={note.id} className="labor-flag-note">
+                              <div className="labor-flag-note-meta">
+                                <span className="labor-flag-note-author">
+                                  {note.authorName}{note.authorUid === user.uid ? ' (you)' : ''}
+                                </span>
+                                <span>· {relativeTime(note.createdAt)}</span>
+                              </div>
+                              <div className="labor-flag-note-body">{note.body}</div>
+                              {canDelete && (
+                                <button className="labor-flag-note-delete"
+                                        onClick={() => handleDeleteLaborFlagNote(note.id)}>
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
                     )}
                   </div>
                 </div>
