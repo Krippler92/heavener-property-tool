@@ -709,6 +709,105 @@
       color: #888;
       padding: 40px;
     }
+    .pitch-form {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      color: #ddd;
+    }
+    .pitch-form-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .pitch-form-subtitle {
+      font-size: 16px;
+      color: #aaa;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+    .pitch-form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .pitch-form-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ddd;
+    }
+    .pitch-form-input,
+    .pitch-form-textarea,
+    .pitch-form-select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 15px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .pitch-form-input:focus,
+    .pitch-form-textarea:focus,
+    .pitch-form-select:focus {
+      outline: none;
+      border-color: #d4a04a;
+    }
+    .pitch-form-textarea {
+      resize: vertical;
+      min-height: 160px;
+    }
+    .pitch-form-char-counter {
+      font-size: 12px;
+      color: #888;
+      align-self: flex-end;
+    }
+    .pitch-form-error {
+      font-size: 14px;
+      color: #e88;
+      background: #2a1515;
+      border: 1px solid #553;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+    }
+    .pitch-form-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+    .pitch-form-cancel {
+      padding: 10px 20px;
+      background: transparent;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .pitch-form-cancel:hover { background: #222; }
+    .pitch-form-submit {
+      padding: 10px 24px;
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .pitch-form-submit:hover { background: #e0ad55; }
+    .pitch-form-submit:disabled,
+    .pitch-form-cancel:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
 
     /* ─── Plan Request Wizard ─── */
     .wizard-container {
@@ -1159,6 +1258,13 @@
         cb(pitches);
       });
     };
+
+    window.firebaseCreateIdeaPitch = (data) =>
+      addDoc(collection(db, "idea_pitches"), {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
 
     // Signal to the React app that Firebase is ready
     window.firebaseReady = true;
@@ -4299,8 +4405,146 @@
         );
       }
 
+      // ─── Pitch an Idea form ───
+      function PitchForm({ userUid, userEmail, userRole, onCancel, onSubmitSuccess }) {
+        const [title, setTitle] = useState('');
+        const [category, setCategory] = useState('');
+        const [description, setDescription] = useState('');
+        const [submitting, setSubmitting] = useState(false);
+        const [error, setError] = useState(null);
+
+        const handleSubmit = async () => {
+          const trimmedTitle = title.trim();
+          const trimmedDescription = description.trim();
+          if (!trimmedTitle) {
+            setError('Please enter a title.');
+            return;
+          }
+          if (trimmedTitle.length > 100) {
+            setError('Title must be 100 characters or fewer.');
+            return;
+          }
+          if (!category) {
+            setError('Please choose a category.');
+            return;
+          }
+          if (!trimmedDescription) {
+            setError('Please enter a description.');
+            return;
+          }
+          if (trimmedDescription.length > 2000) {
+            setError('Description must be 2000 characters or fewer.');
+            return;
+          }
+          setError(null);
+          setSubmitting(true);
+          try {
+            await window.firebaseCreateIdeaPitch({
+              title: trimmedTitle,
+              category,
+              description: trimmedDescription,
+              authorUid: userUid,
+              authorEmail: userEmail,
+              authorRole: userRole,
+              status: 'new',
+            });
+            setTitle('');
+            setCategory('');
+            setDescription('');
+            setSubmitting(false);
+            onSubmitSuccess();
+          } catch (err) {
+            setError(err.message || 'Failed to submit pitch. Please try again.');
+            setSubmitting(false);
+          }
+        };
+
+        return (
+          <div className="pitch-form">
+            <div className="pitch-form-title">💡 Pitch an Idea</div>
+            <div className="pitch-form-subtitle">
+              Share an idea worth pursuing. The admin will review and respond.
+            </div>
+            <div className="pitch-form-field">
+              <label className="pitch-form-label">Title</label>
+              <input
+                type="text"
+                className="pitch-form-input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={100}
+                required
+              />
+              <div className="pitch-form-char-counter">{title.length} / 100</div>
+            </div>
+            <div className="pitch-form-field">
+              <label className="pitch-form-label">Category</label>
+              <select
+                className="pitch-form-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+              >
+                <option value="" disabled>Choose a category...</option>
+                <option value="business">💼 Business</option>
+                <option value="farm">🌾 Farm Operations</option>
+                <option value="technical">🔧 Technical / DIY</option>
+                <option value="energy">⚡ Energy Systems</option>
+                <option value="livestock">🐔 Livestock</option>
+                <option value="property">🏠 Property / Building</option>
+                <option value="marketing">📣 Marketing / Growth</option>
+                <option value="other">💡 Other</option>
+              </select>
+            </div>
+            <div className="pitch-form-field">
+              <label className="pitch-form-label">Description</label>
+              <textarea
+                className="pitch-form-textarea"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={8}
+                maxLength={2000}
+                required
+              />
+              <div className="pitch-form-char-counter">{description.length} / 2000</div>
+            </div>
+            {error && <div className="pitch-form-error">{error}</div>}
+            <div className="pitch-form-actions">
+              <button
+                className="pitch-form-cancel"
+                onClick={onCancel}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="pitch-form-submit"
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? 'Submitting...' : 'Submit Pitch'}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       // ─── Pitch an Idea section ───
       function PitchSection({ userRole, userUid, userEmail, pitches, loading }) {
+        const [mode, setMode] = useState('view');
+        if (mode === 'form') {
+          return (
+            <div className="pitch-section">
+              <PitchForm
+                userUid={userUid}
+                userEmail={userEmail}
+                userRole={userRole}
+                onCancel={() => setMode('view')}
+                onSubmitSuccess={() => setMode('view')}
+              />
+            </div>
+          );
+        }
         if (loading) {
           return (
             <div className="pitch-section">
@@ -4324,7 +4568,7 @@
               <div className="pitch-hero-subtitle">Share an idea worth pursuing.</div>
               <button
                 className="pitch-hero-cta"
-                onClick={() => { /* TODO: Round 4B */ }}
+                onClick={() => setMode('form')}
               >
                 Pitch a New Idea
               </button>
