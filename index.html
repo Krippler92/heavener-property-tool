@@ -285,6 +285,152 @@
     .email-signin-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
     .email-signin-status { color: #22c55e; font-size: 12px; margin-top: 8px; padding: 8px 10px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 6px; }
     .email-signin-error { color: #ef4444; font-size: 12px; margin-top: 8px; padding: 8px 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; }
+
+    /* ─── Sidebar Navigation ─── */
+    .sidebar {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: 220px;
+      background: rgba(15, 15, 15, 0.95);
+      border-right: 1px solid #2a2a2a;
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: flex; flex-direction: column;
+      padding: 18px 0;
+    }
+    .sidebar-brand {
+      padding: 0 18px 18px;
+      font-size: 13px;
+      color: #888;
+      border-bottom: 1px solid #2a2a2a;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
+    }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; flex: 1; }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: transparent;
+      border: none;
+      color: #ccc;
+      font-size: 14px;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 6px;
+      width: 100%;
+      transition: background 0.12s;
+      position: relative;
+    }
+    .sidebar-item:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+    .sidebar-item.active { background: rgba(212, 160, 74, 0.15); color: #d4a04a; }
+    .sidebar-item-badge {
+      margin-left: auto;
+      background: #ef4444; color: #fff;
+      font-size: 10px; font-weight: 700;
+      min-width: 18px; height: 18px;
+      border-radius: 9px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0 5px;
+    }
+    .sidebar-user {
+      padding: 14px 16px;
+      border-top: 1px solid #2a2a2a;
+      margin-top: 8px;
+    }
+    .sidebar-user-name { color: #ddd; font-size: 13px; font-weight: 500; margin-bottom: 2px; word-break: break-word; }
+    .sidebar-user-admin {
+      display: inline-block;
+      color: #d4a04a;
+      font-size: 10px;
+      background: rgba(212, 160, 74, 0.15);
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .sidebar-user-signout {
+      background: transparent;
+      border: 1px solid #444;
+      color: #aaa;
+      font-size: 12px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .sidebar-user-signout:hover { color: #fff; border-color: #666; }
+
+    /* Main content area */
+    .main-content { position: relative; min-height: 100vh; }
+    .main-content.section-map {
+      /* 3D scene fills window; sidebar overlays */
+      margin-left: 0;
+    }
+    .main-content.section-plan {
+      margin-left: 220px;
+      min-height: 100vh;
+      background: #0a0a0a;
+      overflow-y: auto;
+    }
+
+    /* Plan inline view (was the plan-modal) */
+    .plan-view {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      color: #ddd;
+    }
+    .plan-view-loading, .plan-view-error {
+      text-align: center; color: #888; padding: 60px 20px;
+    }
+    .plan-view-error { color: #ef4444; }
+
+    /* Mobile responsive: sidebar becomes bottom nav under 700px */
+    @media (max-width: 700px) {
+      .sidebar {
+        left: 0; right: 0; top: auto;
+        width: auto; height: 60px;
+        flex-direction: row;
+        border-right: none;
+        border-top: 1px solid #2a2a2a;
+        padding: 0;
+        align-items: center;
+      }
+      .sidebar-brand { display: none; }
+      .sidebar-nav {
+        flex-direction: row;
+        flex: 1;
+        padding: 0 8px;
+        justify-content: space-around;
+      }
+      .sidebar-item {
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 6px;
+        font-size: 10px;
+        flex: 1;
+        align-items: center;
+        justify-content: center;
+      }
+      .sidebar-item-icon-mobile { font-size: 18px; }
+      .sidebar-user {
+        border-top: none;
+        border-left: 1px solid #2a2a2a;
+        padding: 8px 12px;
+        margin-top: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .sidebar-user-name, .sidebar-user-admin { display: none; }
+      .sidebar-user-signout { padding: 4px 8px; font-size: 11px; }
+      .main-content.section-plan {
+        margin-left: 0;
+        margin-bottom: 60px;
+      }
+      .plan-view { padding: 24px 16px 80px; }
+    }
   </style>
 </head>
 <body>
@@ -922,7 +1068,7 @@
       // MAIN COMPONENT
       // ─────────────────────────────────────────────────────────────────────────────
 
-      function HeavenerProperty3D({ currentUser, isAdmin }) {
+      function HeavenerProperty3D({ currentUser, isAdmin, onFlagsUnreadCountChange }) {
         const mountRef = useRef(null);
         const sceneRef = useRef({});
         const [data] = useState(DEFAULT_PROPERTY);
@@ -1580,6 +1726,10 @@
             setFlagsUnreadCount(0);
           }
         }, [flagsPanelOpen]);
+
+        useEffect(() => {
+          onFlagsUnreadCountChange?.(flagsUnreadCount);
+        }, [flagsUnreadCount, onFlagsUnreadCountChange]);
 
         // ─── Flags: render as 3D pins on the terrain ───
         useEffect(() => {
@@ -2949,16 +3099,69 @@
         },
       ];
 
+      // ─── Sidebar navigation ───
+      function Sidebar({
+        activeSection,
+        onSectionChange,
+        onOpenNotes,
+        user,
+        isAdmin,
+        onSignOut,
+        notesUnreadCount,
+        flagsUnreadCount
+      }) {
+        return (
+          <div className="sidebar">
+            <div className="sidebar-brand">HEAVENER</div>
+            <div className="sidebar-nav">
+              <button
+                className={`sidebar-item${activeSection === 'map' ? ' active' : ''}`}
+                onClick={() => onSectionChange('map')}
+              >
+                <span className="sidebar-item-icon-mobile">🗺️</span>
+                <span>Map</span>
+                {flagsUnreadCount > 0 && (
+                  <span className="sidebar-item-badge">{flagsUnreadCount}</span>
+                )}
+              </button>
+              <button
+                className={`sidebar-item${activeSection === 'plan' ? ' active' : ''}`}
+                onClick={() => onSectionChange('plan')}
+              >
+                <span className="sidebar-item-icon-mobile">📖</span>
+                <span>Plan</span>
+              </button>
+              <button
+                className="sidebar-item"
+                onClick={() => onOpenNotes()}
+              >
+                <span className="sidebar-item-icon-mobile">📝</span>
+                <span>Notes</span>
+                {notesUnreadCount > 0 && (
+                  <span className="sidebar-item-badge">{notesUnreadCount}</span>
+                )}
+              </button>
+            </div>
+            <div className="sidebar-user">
+              <div className="sidebar-user-name">{user.displayName || user.email}</div>
+              {isAdmin && <span className="sidebar-user-admin">admin</span>}
+              <button className="sidebar-user-signout" onClick={onSignOut}>Sign out</button>
+            </div>
+          </div>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
         const [authLoading, setAuthLoading] = useState(true);
         const [authError, setAuthError] = useState(null);
         const [isAllowed, setIsAllowed] = useState(null);
-        const [planOpen, setPlanOpen] = useState(false);
+        const [activeSection, setActiveSection] = useState('map');
         const [planContent, setPlanContent] = useState(null);
         const [planLoading, setPlanLoading] = useState(false);
         const [planError, setPlanError] = useState(null);
+        const [flagsUnreadCount, setFlagsUnreadCount] = useState(0);
         const [notesOpen, setNotesOpen] = useState(false);
         const [notes, setNotes] = useState([]);
         const [composeTitle, setComposeTitle] = useState("");
@@ -2995,11 +3198,27 @@
         }, [user]);
 
         useEffect(() => {
-          if (!planOpen) return;
-          const handleEsc = (e) => { if (e.key === 'Escape') setPlanOpen(false); };
-          window.addEventListener('keydown', handleEsc);
-          return () => window.removeEventListener('keydown', handleEsc);
-        }, [planOpen]);
+          if (activeSection !== 'plan') return;
+          if (planContent || planLoading) return;
+          let cancelled = false;
+          (async () => {
+            setPlanLoading(true);
+            setPlanError(null);
+            try {
+              const response = await fetch(
+                'https://gist.githubusercontent.com/Krippler92/2ee4baa153bf01420d40729773896e20/raw/farm-plan-master.md'
+              );
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              const text = await response.text();
+              if (!cancelled) setPlanContent(text);
+            } catch (err) {
+              if (!cancelled) setPlanError(err.message);
+            } finally {
+              if (!cancelled) setPlanLoading(false);
+            }
+          })();
+          return () => { cancelled = true; };
+        }, [activeSection]);
 
         useEffect(() => {
           if (!user || !isAllowed) return;
@@ -3162,25 +3381,6 @@
           }
         };
 
-        const openPlan = async () => {
-          setPlanOpen(true);
-          if (planContent || planLoading) return;
-          setPlanLoading(true);
-          setPlanError(null);
-          try {
-            const response = await fetch(
-              'https://gist.githubusercontent.com/Krippler92/2ee4baa153bf01420d40729773896e20/raw/farm-plan-master.md'
-            );
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const text = await response.text();
-            setPlanContent(text);
-          } catch (err) {
-            setPlanError(err.message);
-          } finally {
-            setPlanLoading(false);
-          }
-        };
-
         if (authLoading) {
           return <div className="loading">Loading...</div>;
         }
@@ -3241,72 +3441,76 @@
           return <AccessRequired email={user.email} onSignOut={handleSignOut} />;
         }
 
-        // Authenticated — show the main app with user bar
+        // Authenticated — show the main app with sidebar navigation
         const isAdmin = user.email === window.ADMIN_EMAIL;
         return (
           <>
-            <div className="user-bar">
-              <button className="plan-link" onClick={() => openPlan()}>📖 Read the Plan</button>
-              <button className="plan-link" onClick={() => setNotesOpen(true)}>
-                📝 Notes{notesUnreadCount > 0 && <span className="notes-badge">{notesUnreadCount}</span>}
-              </button>
-              <span className="user-name">{user.displayName || user.email}</span>
-              {isAdmin && <span className="user-admin">admin</span>}
-              <button onClick={handleSignOut}>Sign out</button>
-            </div>
-            <HeavenerProperty3D currentUser={user} isAdmin={isAdmin} />
-            {planOpen && (
-              <div className="plan-modal-backdrop" onClick={() => setPlanOpen(false)}>
-                <div className="plan-modal" onClick={e => e.stopPropagation()}>
-                  <button className="plan-close" onClick={() => setPlanOpen(false)} aria-label="Close">×</button>
-                  <div className="plan-content">
-                    {planLoading && <div className="plan-loading">Loading farm plan…</div>}
-                    {planError && <div className="plan-error">Couldn't load plan: {planError}</div>}
-                    {planContent && (() => {
-                      const laborFlagsRegex = /(\n## 🚩 Labor Flags[\s\S]*?)(?=\n## |\n# |$)/;
-                      const match = planContent.match(laborFlagsRegex);
-                      const renderFlags = () => (
-                        <div className="labor-flags-section">
-                          <div className="labor-flags-title">🚩 Labor Flags</div>
-                          <div className="labor-flags-intro">
-                            Items requiring recurring physical labor that should be reduced via tool design. Tap any flag to see details and add notes.
-                          </div>
-                          {LABOR_FLAGS.map(flag => (
-                            <div key={flag.id}
-                                 className={`labor-flag-card status-${flag.status.replace(' ', '_')}`}
-                                 onClick={() => { setOpenLaborFlag(flag); setLaborFlagPanelMinimized(false); }}>
-                              <div className="labor-flag-card-header">
-                                <span className="labor-flag-id">🚩 {flag.id}</span>
-                                <span className={`labor-flag-status status-${flag.status.replace(' ', '_')}`}>{flag.status}</span>
-                              </div>
-                              <div className="labor-flag-card-title">{flag.title}</div>
-                              <div className="labor-flag-card-hint">Tap for details and notes →</div>
-                            </div>
-                          ))}
+            <Sidebar
+              activeSection={activeSection}
+              onSectionChange={setActiveSection}
+              onOpenNotes={() => setNotesOpen(true)}
+              user={user}
+              isAdmin={isAdmin}
+              onSignOut={handleSignOut}
+              notesUnreadCount={notesUnreadCount}
+              flagsUnreadCount={flagsUnreadCount}
+            />
+            <div className={`main-content section-${activeSection}`}>
+              {activeSection === 'map' && (
+                <HeavenerProperty3D
+                  currentUser={user}
+                  isAdmin={isAdmin}
+                  onFlagsUnreadCountChange={setFlagsUnreadCount}
+                />
+              )}
+              {activeSection === 'plan' && (
+                <div className="plan-view">
+                  {planLoading && <div className="plan-view-loading">Loading farm plan…</div>}
+                  {planError && <div className="plan-view-error">Couldn't load plan: {planError}</div>}
+                  {planContent && (() => {
+                    const laborFlagsRegex = /(\n## 🚩 Labor Flags[\s\S]*?)(?=\n## |\n# |$)/;
+                    const match = planContent.match(laborFlagsRegex);
+                    const renderFlags = () => (
+                      <div className="labor-flags-section">
+                        <div className="labor-flags-title">🚩 Labor Flags</div>
+                        <div className="labor-flags-intro">
+                          Items requiring recurring physical labor that should be reduced via tool design. Tap any flag to see details and add notes.
                         </div>
-                      );
-                      if (!match) {
-                        return (
-                          <>
-                            {renderFlags()}
-                            <div dangerouslySetInnerHTML={{ __html: window.marked.parse(planContent) }} />
-                          </>
-                        );
-                      }
-                      const before = planContent.slice(0, match.index);
-                      const after = planContent.slice(match.index + match[0].length);
+                        {LABOR_FLAGS.map(flag => (
+                          <div key={flag.id}
+                               className={`labor-flag-card status-${flag.status.replace(' ', '_')}`}
+                               onClick={() => { setOpenLaborFlag(flag); setLaborFlagPanelMinimized(false); }}>
+                            <div className="labor-flag-card-header">
+                              <span className="labor-flag-id">🚩 {flag.id}</span>
+                              <span className={`labor-flag-status status-${flag.status.replace(' ', '_')}`}>{flag.status}</span>
+                            </div>
+                            <div className="labor-flag-card-title">{flag.title}</div>
+                            <div className="labor-flag-card-hint">Tap for details and notes →</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                    if (!match) {
                       return (
                         <>
-                          <div dangerouslySetInnerHTML={{ __html: window.marked.parse(before) }} />
                           {renderFlags()}
-                          <div dangerouslySetInnerHTML={{ __html: window.marked.parse(after) }} />
+                          <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(planContent) }} />
                         </>
                       );
-                    })()}
-                  </div>
+                    }
+                    const before = planContent.slice(0, match.index);
+                    const after = planContent.slice(match.index + match[0].length);
+                    return (
+                      <>
+                        <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(before) }} />
+                        {renderFlags()}
+                        <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(after) }} />
+                      </>
+                    );
+                  })()}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
             {notesOpen && (
               <div className="notes-modal-backdrop" onClick={() => setNotesOpen(false)}>
                 <div className="notes-modal" onClick={e => e.stopPropagation()}>
