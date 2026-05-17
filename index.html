@@ -372,6 +372,12 @@
       background: #0a0a0a;
       overflow-y: auto;
     }
+    .main-content.section-get-a-plan {
+      margin-left: 220px;
+      height: 100vh;
+      background: #0a0a0a;
+      overflow-y: auto;
+    }
 
     /* Plan inline view (was the plan-modal) */
     .plan-view {
@@ -426,6 +432,12 @@
       .sidebar-user-name, .sidebar-user-admin { display: none; }
       .sidebar-user-signout { padding: 4px 8px; font-size: 11px; }
       .main-content.section-plan {
+        margin-left: 0;
+        margin-bottom: 60px;
+        height: calc(100vh - 60px);
+        overflow-y: auto;
+      }
+      .main-content.section-get-a-plan {
         margin-left: 0;
         margin-bottom: 60px;
         height: calc(100vh - 60px);
@@ -532,6 +544,122 @@
     .concern-card-action:hover { color: #fff; }
     .concern-card-action.resolve:hover { color: #22c55e; }
     .concern-card-action.delete:hover { color: #ef4444; }
+
+    /* ─── Get a Plan section ─── */
+    .gap-view {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      color: #ddd;
+    }
+    .gap-hero {
+      text-align: center;
+      padding: 60px 20px 40px;
+    }
+    .gap-hero-icon { font-size: 48px; margin-bottom: 12px; }
+    .gap-hero-title {
+      font-size: 28px;
+      color: #fff;
+      margin: 0 0 12px;
+      font-weight: 600;
+    }
+    .gap-hero-subtitle {
+      font-size: 15px;
+      color: #aaa;
+      line-height: 1.5;
+      margin: 0 auto 28px;
+      max-width: 500px;
+    }
+    .gap-cta-btn {
+      display: inline-block;
+      padding: 12px 28px;
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.15s;
+    }
+    .gap-cta-btn:hover {
+      background: #e0ad55;
+      transform: translateY(-1px);
+    }
+    .gap-list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .gap-list-title {
+      font-size: 18px;
+      color: #fff;
+      font-weight: 600;
+      margin: 0;
+    }
+    .gap-list-new-btn {
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .gap-list-new-btn:hover { background: #e0ad55; }
+    .gap-request-card {
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .gap-request-card:hover { border-color: #d4a04a; }
+    .gap-request-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .gap-request-title {
+      font-size: 15px;
+      color: #fff;
+      font-weight: 600;
+    }
+    .gap-status-badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .gap-status-new { background: rgba(212, 160, 74, 0.2); color: #d4a04a; }
+    .gap-status-in-progress { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .gap-status-completed { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .gap-status-declined { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .gap-status-paused { background: rgba(150, 150, 150, 0.2); color: #aaa; }
+    .gap-request-meta {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .gap-request-snippet {
+      font-size: 13px;
+      color: #bbb;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -679,6 +807,41 @@
             || new Date().toISOString(),
         }));
         cb(concerns);
+      });
+    };
+
+    window.firebaseAddPlanRequest = (data) =>
+      addDoc(collection(db, "plan_requests"), data);
+    window.firebaseUpdatePlanRequest = (id, data) =>
+      updateDoc(doc(db, "plan_requests", id), data);
+    window.firebaseDeletePlanRequest = (id) =>
+      deleteDoc(doc(db, "plan_requests", id));
+    window.firebasePlanRequestsSubscribe = (cb, ownUid) => {
+      let q;
+      if (ownUid) {
+        q = query(
+          collection(db, "plan_requests"),
+          orderBy("createdAt", "desc")
+        );
+        return onSnapshot(q, (snapshot) => {
+          const all = snapshot.docs.map(d => ({
+            ...d.data(),
+            id: d.id,
+            createdAt: d.data().createdAt?.toDate?.()?.toISOString()
+              || new Date().toISOString(),
+          }));
+          cb(all.filter(r => r.authorUid === ownUid));
+        });
+      }
+      q = query(collection(db, "plan_requests"), orderBy("createdAt", "desc"));
+      return onSnapshot(q, (snapshot) => {
+        const all = snapshot.docs.map(d => ({
+          ...d.data(),
+          id: d.id,
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString()
+            || new Date().toISOString(),
+        }));
+        cb(all);
       });
     };
 
@@ -3282,6 +3445,7 @@
       }) {
         const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
         const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
+        const canSeeGetAPlan = ['admin', 'family'].includes(userRole);
         return (
           <div className="sidebar">
             <div className="sidebar-brand">HEAVENER</div>
@@ -3318,6 +3482,15 @@
                   {notesUnreadCount > 0 && (
                     <span className="sidebar-item-badge">{notesUnreadCount}</span>
                   )}
+                </button>
+              )}
+              {canSeeGetAPlan && (
+                <button
+                  className={`sidebar-item${activeSection === 'get-a-plan' ? ' active' : ''}`}
+                  onClick={() => onSectionChange('get-a-plan')}
+                >
+                  <span className="sidebar-item-icon-mobile">🏗️</span>
+                  <span>Get a Plan</span>
                 </button>
               )}
             </div>
@@ -3536,10 +3709,14 @@
           if (!userRole) return;
           const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
           const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
+          const canSeeGetAPlan = ['admin', 'family'].includes(userRole);
           if (activeSection === 'map' && !canSeeMap) {
             setActiveSection('plan');
           }
           if (activeSection === 'notes' && !canSeeNotes) {
+            setActiveSection('plan');
+          }
+          if (activeSection === 'get-a-plan' && !canSeeGetAPlan) {
             setActiveSection('plan');
           }
         }, [userRole, activeSection]);
@@ -3959,6 +4136,20 @@
                       </>
                     );
                   })()}
+                </div>
+              )}
+              {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
+                <div className="gap-view">
+                  <div className="gap-hero">
+                    <div className="gap-hero-icon">🏗️</div>
+                    <div className="gap-hero-title">Get a Custom Plan</div>
+                    <div className="gap-hero-subtitle">
+                      Want Lee to build you a custom plan? Tell him what you want and he'll
+                      handle the rest. You just need to share what's on your mind — Lee figures
+                      out the details, does the work, and delivers the plan.
+                    </div>
+                    <button className="gap-cta-btn">Start Your Request (coming soon)</button>
+                  </div>
                 </div>
               )}
             </div>
