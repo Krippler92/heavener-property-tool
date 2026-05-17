@@ -184,6 +184,14 @@
     }
     .plan-content th { background: #2a2a2a; color: #fff; font-weight: 600; }
     .plan-content tr:nth-child(even) td { background: rgba(255, 255, 255, 0.02); }
+    .access-required-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100vw; height: 100vh; background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%); padding: 24px; }
+    .access-required-card { background: rgba(30, 30, 30, 0.95); border: 1px solid rgba(212, 160, 74, 0.3); border-radius: 12px; padding: 40px; max-width: 480px; text-align: center; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
+    .access-required-card h1 { font-size: 22px; margin-bottom: 14px; color: #d4a04a; }
+    .access-required-card p { color: #bbb; margin-bottom: 18px; line-height: 1.55; font-size: 14px; }
+    .access-required-email { display: inline-block; background: #0a0a0a; border: 1px solid #333; border-radius: 6px; padding: 10px 16px; margin: 4px 0 20px; color: #fff; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; user-select: all; }
+    .access-required-btn { display: inline-block; padding: 9px 20px; background: transparent; color: #ddd; border: 1px solid #444; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .access-required-btn:hover { background: rgba(255,255,255,0.05); border-color: #666; }
+    .access-required-checking { color: #888; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -208,7 +216,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, getDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
     // ─── FIREBASE CONFIG (replace these placeholders with your Firebase project keys) ───
     const firebaseConfig = {
@@ -247,6 +255,18 @@
     };
     window.firebaseServerTimestamp = serverTimestamp;
     window.ADMIN_EMAIL = ADMIN_EMAIL;
+
+    window.firebaseCheckAllowed = async (email) => {
+      if (!email) return false;
+      if (email === ADMIN_EMAIL) return true;
+      try {
+        const snap = await getDoc(doc(db, "allowed_users", email));
+        return snap.exists();
+      } catch (e) {
+        console.warn("allowlist check failed:", e);
+        return false;
+      }
+    };
 
     // Signal to the React app that Firebase is ready
     window.firebaseReady = true;
@@ -2680,11 +2700,25 @@
       }
 
 
+      function AccessRequired({ email, onSignOut }) {
+        return (
+          <div className="access-required-screen">
+            <div className="access-required-card">
+              <h1>Access Required</h1>
+              <p>This tool is invite-only. Your email is below — send it to Lee to request access. Once added, refresh this page.</p>
+              <div className="access-required-email">{email}</div>
+              <div><button className="access-required-btn" onClick={onSignOut}>Sign out</button></div>
+            </div>
+          </div>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
         const [authLoading, setAuthLoading] = useState(true);
         const [authError, setAuthError] = useState(null);
+        const [isAllowed, setIsAllowed] = useState(null);
         const [planOpen, setPlanOpen] = useState(false);
         const [planContent, setPlanContent] = useState(null);
         const [planLoading, setPlanLoading] = useState(false);
@@ -2697,6 +2731,16 @@
           });
           return () => unsub && unsub();
         }, []);
+
+        useEffect(() => {
+          if (!user) { setIsAllowed(null); return; }
+          let cancelled = false;
+          (async () => {
+            const allowed = await window.firebaseCheckAllowed(user.email);
+            if (!cancelled) setIsAllowed(allowed);
+          })();
+          return () => { cancelled = true; };
+        }, [user]);
 
         useEffect(() => {
           if (!planOpen) return;
@@ -2759,6 +2803,13 @@
               </div>
             </div>
           );
+        }
+
+        if (isAllowed === null) {
+          return <div className="loading">Checking access...</div>;
+        }
+        if (isAllowed === false) {
+          return <AccessRequired email={user.email} onSignOut={handleSignOut} />;
         }
 
         // Authenticated — show the main app with user bar
