@@ -192,6 +192,44 @@
     .access-required-btn { display: inline-block; padding: 9px 20px; background: transparent; color: #ddd; border: 1px solid #444; border-radius: 6px; font-size: 13px; cursor: pointer; }
     .access-required-btn:hover { background: rgba(255,255,255,0.05); border-color: #666; }
     .access-required-checking { color: #888; font-size: 14px; }
+    .user-bar .plan-link { position: relative; }
+    .notes-modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.78); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px); }
+    .notes-modal { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; width: 92%; max-width: 720px; height: 88vh; display: flex; flex-direction: column; position: relative; overflow: hidden; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7); }
+    .notes-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #2a2a2a; }
+    .notes-title { color: #fff; font-size: 17px; font-weight: 600; }
+    .notes-close { background: transparent; border: none; color: #999; font-size: 26px; cursor: pointer; width: 32px; height: 32px; line-height: 1; }
+    .notes-close:hover { color: #fff; }
+    .notes-body { flex: 1; overflow-y: auto; padding: 18px 22px 22px; }
+    .notes-compose { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid #2a2a2a; }
+    .notes-compose input, .notes-compose textarea { background: #0f0f0f; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; color: #e8e8e8; font-size: 14px; font-family: inherit; resize: vertical; }
+    .notes-compose input:focus, .notes-compose textarea:focus { outline: none; border-color: #d4a04a; }
+    .notes-compose textarea { min-height: 70px; }
+    .notes-post-btn { align-self: flex-start; padding: 8px 16px; background: #d4a04a; color: #1a1a1a; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .notes-post-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .notes-empty { color: #777; text-align: center; padding: 32px 12px; font-size: 14px; }
+    .notes-list { display: flex; flex-direction: column; gap: 16px; }
+    .notes-item { background: #161616; border: 1px solid #262626; border-radius: 8px; padding: 12px 14px; }
+    .notes-item-reply { background: #141414; border-color: #222; padding: 10px 12px; font-size: 12.5px; margin-left: 24px; margin-top: 8px; }
+    .notes-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: #888; flex-wrap: wrap; }
+    .notes-author { color: #d8d8d8; font-weight: 500; }
+    .notes-admin-badge { color: #d4a04a; font-size: 10px; padding: 1px 6px; background: rgba(212, 160, 74, 0.15); border-radius: 8px; }
+    .notes-time { color: #666; }
+    .notes-item-title { color: #fff; font-weight: 600; margin: 4px 0 4px; font-size: 14px; }
+    .notes-item-body { color: #ddd; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .notes-item-reply .notes-item-body { font-size: 12.5px; }
+    .notes-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .notes-action { background: transparent; border: none; color: #888; cursor: pointer; font-size: 11.5px; padding: 2px 4px; }
+    .notes-action:hover { color: #fff; }
+    .notes-action-delete:hover { color: #ef4444; }
+    .notes-reply-compose { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .notes-reply-compose textarea { background: #0f0f0f; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; color: #e8e8e8; font-size: 13px; font-family: inherit; min-height: 50px; resize: vertical; }
+    .notes-reply-compose textarea:focus { outline: none; border-color: #d4a04a; }
+    .notes-reply-buttons { display: flex; gap: 8px; }
+    .notes-reply-buttons button { padding: 5px 12px; border-radius: 5px; font-size: 12px; cursor: pointer; border: none; }
+    .notes-reply-post { background: #d4a04a; color: #1a1a1a; font-weight: 600; }
+    .notes-reply-post:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .notes-reply-cancel { background: transparent; color: #999; border: 1px solid #333 !important; }
+    .notes-replies { margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -266,6 +304,20 @@
         console.warn("allowlist check failed:", e);
         return false;
       }
+    };
+
+    window.firebaseAddNote = (data) => addDoc(collection(db, "family_notes"), data);
+    window.firebaseDeleteNote = (id) => deleteDoc(doc(db, "family_notes", id));
+    window.firebaseNotesSubscribe = (cb) => {
+      const q = query(collection(db, "family_notes"), orderBy("createdAt", "asc"));
+      return onSnapshot(q, (snapshot) => {
+        const notes = snapshot.docs.map(d => ({
+          ...d.data(),
+          id: d.id,
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        }));
+        cb(notes);
+      });
     };
 
     // Signal to the React app that Firebase is ready
@@ -2723,6 +2775,12 @@
         const [planContent, setPlanContent] = useState(null);
         const [planLoading, setPlanLoading] = useState(false);
         const [planError, setPlanError] = useState(null);
+        const [notesOpen, setNotesOpen] = useState(false);
+        const [notes, setNotes] = useState([]);
+        const [composeTitle, setComposeTitle] = useState("");
+        const [composeBody, setComposeBody] = useState("");
+        const [replyingTo, setReplyingTo] = useState(null);
+        const [replyBody, setReplyBody] = useState("");
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -2748,6 +2806,64 @@
           window.addEventListener('keydown', handleEsc);
           return () => window.removeEventListener('keydown', handleEsc);
         }, [planOpen]);
+
+        useEffect(() => {
+          if (!user || !isAllowed) return;
+          const unsub = window.firebaseNotesSubscribe((newNotes) => {
+            setNotes(newNotes);
+          });
+          return () => unsub();
+        }, [user, isAllowed]);
+
+        useEffect(() => {
+          if (!notesOpen) return;
+          const handleEsc = (e) => { if (e.key === 'Escape') setNotesOpen(false); };
+          window.addEventListener('keydown', handleEsc);
+          return () => window.removeEventListener('keydown', handleEsc);
+        }, [notesOpen]);
+
+        const handlePostNote = async () => {
+          if (!composeBody.trim()) return;
+          await window.firebaseAddNote({
+            title: composeTitle.trim() || null,
+            body: composeBody.trim(),
+            authorUid: user.uid,
+            authorName: user.displayName || user.email,
+            authorEmail: user.email,
+            createdAt: window.firebaseServerTimestamp(),
+            parentNoteId: null,
+          });
+          setComposeTitle("");
+          setComposeBody("");
+        };
+
+        const handlePostReply = async (parentId) => {
+          if (!replyBody.trim()) return;
+          await window.firebaseAddNote({
+            body: replyBody.trim(),
+            authorUid: user.uid,
+            authorName: user.displayName || user.email,
+            authorEmail: user.email,
+            createdAt: window.firebaseServerTimestamp(),
+            parentNoteId: parentId,
+          });
+          setReplyBody("");
+          setReplyingTo(null);
+        };
+
+        const handleDeleteNote = async (id) => {
+          if (!confirm("Delete this note?")) return;
+          await window.firebaseDeleteNote(id);
+        };
+
+        const relativeTime = (iso) => {
+          const ms = Date.now() - new Date(iso).getTime();
+          if (ms < 60000) return "just now";
+          if (ms < 3600000) return `${Math.floor(ms/60000)}m ago`;
+          if (ms < 86400000) return `${Math.floor(ms/3600000)}h ago`;
+          if (ms < 604800000) return `${Math.floor(ms/86400000)}d ago`;
+          return new Date(iso).toLocaleDateString();
+        };
 
         const handleSignIn = async () => {
           setAuthError(null);
@@ -2818,6 +2934,7 @@
           <>
             <div className="user-bar">
               <button className="plan-link" onClick={() => openPlan()}>📖 Read the Plan</button>
+              <button className="plan-link" onClick={() => setNotesOpen(true)}>📝 Notes</button>
               <span className="user-name">{user.displayName || user.email}</span>
               {isAdmin && <span className="user-admin">admin</span>}
               <button onClick={handleSignOut}>Sign out</button>
@@ -2832,6 +2949,122 @@
                     {planError && <div className="plan-error">Couldn't load plan: {planError}</div>}
                     {planContent && (
                       <div dangerouslySetInnerHTML={{ __html: window.marked.parse(planContent) }} />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {notesOpen && (
+              <div className="notes-modal-backdrop" onClick={() => setNotesOpen(false)}>
+                <div className="notes-modal" onClick={e => e.stopPropagation()}>
+                  <div className="notes-header">
+                    <div className="notes-title">Family Notes</div>
+                    <button className="notes-close" onClick={() => setNotesOpen(false)}>×</button>
+                  </div>
+                  <div className="notes-body">
+                    <div className="notes-compose">
+                      <input
+                        type="text"
+                        placeholder="Title (optional)"
+                        value={composeTitle}
+                        onChange={(e) => setComposeTitle(e.target.value)}
+                      />
+                      <textarea
+                        placeholder="What's on your mind?"
+                        value={composeBody}
+                        onChange={(e) => setComposeBody(e.target.value)}
+                      />
+                      <button
+                        className="notes-post-btn"
+                        onClick={handlePostNote}
+                        disabled={!composeBody.trim()}
+                      >
+                        Post note
+                      </button>
+                    </div>
+                    {notes.filter(n => !n.parentNoteId).length === 0 ? (
+                      <div className="notes-empty">No notes yet. Be the first to share something.</div>
+                    ) : (
+                      <div className="notes-list">
+                        {notes
+                          .filter(n => !n.parentNoteId)
+                          .slice()
+                          .reverse()
+                          .map(note => {
+                            const replies = notes.filter(r => r.parentNoteId === note.id);
+                            const canDelete = isAdmin || note.authorUid === user.uid;
+                            return (
+                              <div key={note.id} className="notes-item">
+                                <div className="notes-meta">
+                                  <span className="notes-author">
+                                    {note.authorName}{note.authorUid === user.uid ? " (you)" : ""}
+                                  </span>
+                                  {note.authorEmail === window.ADMIN_EMAIL &&
+                                    <span className="notes-admin-badge">admin</span>}
+                                  <span className="notes-time">· {relativeTime(note.createdAt)}</span>
+                                </div>
+                                {note.title && <div className="notes-item-title">{note.title}</div>}
+                                <div className="notes-item-body">{note.body}</div>
+                                <div className="notes-actions">
+                                  <button className="notes-action" onClick={() => setReplyingTo(replyingTo === note.id ? null : note.id)}>Reply</button>
+                                  {canDelete && (
+                                    <button className="notes-action notes-action-delete" onClick={() => handleDeleteNote(note.id)}>Delete</button>
+                                  )}
+                                </div>
+                                {replyingTo === note.id && (
+                                  <div className="notes-reply-compose">
+                                    <textarea
+                                      placeholder="Write a reply..."
+                                      value={replyBody}
+                                      onChange={(e) => setReplyBody(e.target.value)}
+                                      autoFocus
+                                    />
+                                    <div className="notes-reply-buttons">
+                                      <button
+                                        className="notes-reply-post"
+                                        onClick={() => handlePostReply(note.id)}
+                                        disabled={!replyBody.trim()}
+                                      >
+                                        Post reply
+                                      </button>
+                                      <button
+                                        className="notes-reply-cancel"
+                                        onClick={() => { setReplyingTo(null); setReplyBody(""); }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                                {replies.length > 0 && (
+                                  <div className="notes-replies">
+                                    {replies.map(reply => {
+                                      const canDeleteReply = isAdmin || reply.authorUid === user.uid;
+                                      return (
+                                        <div key={reply.id} className="notes-item notes-item-reply">
+                                          <div className="notes-meta">
+                                            <span className="notes-author">
+                                              {reply.authorName}{reply.authorUid === user.uid ? " (you)" : ""}
+                                            </span>
+                                            {reply.authorEmail === window.ADMIN_EMAIL &&
+                                              <span className="notes-admin-badge">admin</span>}
+                                            <span className="notes-time">· {relativeTime(reply.createdAt)}</span>
+                                          </div>
+                                          <div className="notes-item-body">{reply.body}</div>
+                                          {canDeleteReply && (
+                                            <div className="notes-actions">
+                                              <button className="notes-action notes-action-delete" onClick={() => handleDeleteNote(reply.id)}>Delete</button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
                     )}
                   </div>
                 </div>
