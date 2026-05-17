@@ -275,6 +275,16 @@
     .labor-flag-note-body { color: #ddd; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
     .labor-flag-note-delete { background: transparent; border: none; color: #888; cursor: pointer; font-size: 11px; padding: 2px 4px; margin-top: 4px; }
     .labor-flag-note-delete:hover { color: #ef4444; }
+
+    .email-signin-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid #2a2a2a; }
+    .email-signin-divider { color: #666; font-size: 12px; text-align: center; margin-bottom: 14px; }
+    .email-signin-form { display: flex; flex-direction: column; gap: 8px; }
+    .email-signin-input { background: #0f0f0f; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; color: #e8e8e8; font-size: 14px; font-family: inherit; }
+    .email-signin-input:focus { outline: none; border-color: #d4a04a; }
+    .email-signin-btn { padding: 10px 16px; background: #d4a04a; color: #1a1a1a; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .email-signin-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .email-signin-status { color: #22c55e; font-size: 12px; margin-top: 8px; padding: 8px 10px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 6px; }
+    .email-signin-error { color: #ef4444; font-size: 12px; margin-top: 8px; padding: 8px 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -298,7 +308,7 @@
   <!-- Firebase v10 SDK (modular) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
     import { getFirestore, collection, addDoc, deleteDoc, doc, getDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
     // ─── FIREBASE CONFIG (replace these placeholders with your Firebase project keys) ───
@@ -363,6 +373,25 @@
         }));
         cb(notes);
       });
+    };
+
+    window.firebaseSendEmailLink = async (email) => {
+      const actionCodeSettings = {
+        url: window.location.origin + window.location.pathname,
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      localStorage.setItem("heavener_email_for_signin", email);
+    };
+
+    window.firebaseIsEmailLinkReturn = () => {
+      return isSignInWithEmailLink(auth, window.location.href);
+    };
+
+    window.firebaseCompleteEmailLinkSignIn = async (email) => {
+      const result = await signInWithEmailLink(auth, email, window.location.href);
+      localStorage.removeItem("heavener_email_for_signin");
+      return result;
     };
 
     window.firebaseAddLaborFlagNote = (data) => addDoc(collection(db, "labor_flag_notes"), data);
@@ -2941,6 +2970,11 @@
         const [laborFlagPanelMinimized, setLaborFlagPanelMinimized] = useState(false);
         const [laborFlagNotes, setLaborFlagNotes] = useState([]);
         const [laborFlagNoteBody, setLaborFlagNoteBody] = useState("");
+        const [emailInput, setEmailInput] = useState("");
+        const [emailLinkSending, setEmailLinkSending] = useState(false);
+        const [emailLinkSent, setEmailLinkSent] = useState(false);
+        const [emailLinkError, setEmailLinkError] = useState(null);
+        const [completingEmailLink, setCompletingEmailLink] = useState(false);
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -3077,6 +3111,49 @@
           }
         };
 
+        const handleSendEmailLink = async () => {
+          const email = emailInput.trim().toLowerCase();
+          if (!email || !email.includes("@")) {
+            setEmailLinkError("Enter a valid email address.");
+            return;
+          }
+          setEmailLinkSending(true);
+          setEmailLinkError(null);
+          try {
+            await window.firebaseSendEmailLink(email);
+            setEmailLinkSent(true);
+            setEmailInput("");
+          } catch (err) {
+            setEmailLinkError(err.message || "Failed to send link. Try again.");
+          } finally {
+            setEmailLinkSending(false);
+          }
+        };
+
+        useEffect(() => {
+          if (!window.firebaseIsEmailLinkReturn || !window.firebaseIsEmailLinkReturn()) {
+            return;
+          }
+          setCompletingEmailLink(true);
+          let email = localStorage.getItem("heavener_email_for_signin");
+          if (!email) {
+            email = window.prompt("Confirm the email you used to request the sign-in link:");
+          }
+          if (!email) {
+            setCompletingEmailLink(false);
+            return;
+          }
+          window.firebaseCompleteEmailLinkSignIn(email)
+            .then(() => {
+              setCompletingEmailLink(false);
+              window.history.replaceState({}, document.title, window.location.pathname);
+            })
+            .catch((err) => {
+              setEmailLinkError("Sign-in link expired or invalid. Try requesting a new one.");
+              setCompletingEmailLink(false);
+            });
+        }, []);
+
         const handleSignOut = async () => {
           try {
             await window.firebaseSignOut();
@@ -3108,6 +3185,10 @@
           return <div className="loading">Loading...</div>;
         }
 
+        if (completingEmailLink) {
+          return <div className="loading">Completing sign-in...</div>;
+        }
+
         if (!user) {
           return (
             <div className="auth-screen">
@@ -3119,6 +3200,35 @@
                   Sign in with Google
                 </button>
                 {authError && <div className="auth-error">{authError}</div>}
+                <div className="email-signin-section">
+                  <div className="email-signin-divider">— or —</div>
+                  {emailLinkSent ? (
+                    <div className="email-signin-status">
+                      Check your email for a sign-in link. Click the link to complete sign-in. Safe to close this tab.
+                    </div>
+                  ) : (
+                    <div className="email-signin-form">
+                      <input
+                        type="email"
+                        className="email-signin-input"
+                        placeholder="your-email@example.com"
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        disabled={emailLinkSending}
+                      />
+                      <button
+                        className="email-signin-btn"
+                        onClick={handleSendEmailLink}
+                        disabled={emailLinkSending || !emailInput.trim()}
+                      >
+                        {emailLinkSending ? "Sending..." : "Email me a sign-in link"}
+                      </button>
+                      {emailLinkError && (
+                        <div className="email-signin-error">{emailLinkError}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
