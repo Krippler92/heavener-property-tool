@@ -193,6 +193,7 @@
     .access-required-btn:hover { background: rgba(255,255,255,0.05); border-color: #666; }
     .access-required-checking { color: #888; font-size: 14px; }
     .user-bar .plan-link { position: relative; }
+    .notes-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; margin-left: 5px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; border-radius: 8px; line-height: 1; vertical-align: middle; }
     .notes-modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.78); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(4px); }
     .notes-modal { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; width: 92%; max-width: 720px; height: 88vh; display: flex; flex-direction: column; position: relative; overflow: hidden; box-shadow: 0 12px 48px rgba(0, 0, 0, 0.7); }
     .notes-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid #2a2a2a; }
@@ -861,6 +862,7 @@
         const [flagsLoaded, setFlagsLoaded] = useState(false);
         const [flagModal, setFlagModal] = useState(null); // { worldPos, propX, propY, zone }
         const [flagsPanelOpen, setFlagsPanelOpen] = useState(false);
+        const [flagsUnreadCount, setFlagsUnreadCount] = useState(0);
         const [exportOpen, setExportOpen] = useState(false);
         const [selectedFlag, setSelectedFlag] = useState(null);
         const [cameraYaw, setCameraYaw] = useState(Math.PI / 2);
@@ -1471,9 +1473,26 @@
           const unsub = window.firebaseFlagSubscribe((firebaseFlags) => {
             setFlags(firebaseFlags);
             setFlagsLoaded(true);
+            const lastSeen = localStorage.getItem("heavener_last_seen_flags");
+            if (!lastSeen) {
+              setFlagsUnreadCount(0);
+            } else {
+              const lastSeenDate = new Date(lastSeen);
+              const unread = firebaseFlags.filter(f =>
+                f.authorUid !== currentUser?.uid && new Date(f.createdAt) > lastSeenDate
+              ).length;
+              setFlagsUnreadCount(unread);
+            }
           });
           return () => unsub && unsub();
-        }, []);
+        }, [currentUser]);
+
+        useEffect(() => {
+          if (flagsPanelOpen) {
+            localStorage.setItem("heavener_last_seen_flags", new Date().toISOString());
+            setFlagsUnreadCount(0);
+          }
+        }, [flagsPanelOpen]);
 
         // ─── Flags: render as 3D pins on the terrain ───
         useEffect(() => {
@@ -1712,6 +1731,7 @@
               >
                 <Flag size={13} /> notes
                 {flags.length > 0 && <span style={{ marginLeft: 2, opacity: 0.85 }}>· {flags.length}</span>}
+                {flagsUnreadCount > 0 && <span className="notes-badge">{flagsUnreadCount}</span>}
               </button>
               <button
                 onClick={() => setExportOpen(true)}
@@ -2781,6 +2801,7 @@
         const [composeBody, setComposeBody] = useState("");
         const [replyingTo, setReplyingTo] = useState(null);
         const [replyBody, setReplyBody] = useState("");
+        const [notesUnreadCount, setNotesUnreadCount] = useState(0);
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -2811,9 +2832,26 @@
           if (!user || !isAllowed) return;
           const unsub = window.firebaseNotesSubscribe((newNotes) => {
             setNotes(newNotes);
+            const lastSeen = localStorage.getItem("heavener_last_seen_notes");
+            if (!lastSeen) {
+              setNotesUnreadCount(0);
+            } else {
+              const lastSeenDate = new Date(lastSeen);
+              const unread = newNotes.filter(n =>
+                n.authorUid !== user.uid && new Date(n.createdAt) > lastSeenDate
+              ).length;
+              setNotesUnreadCount(unread);
+            }
           });
           return () => unsub();
         }, [user, isAllowed]);
+
+        useEffect(() => {
+          if (notesOpen) {
+            localStorage.setItem("heavener_last_seen_notes", new Date().toISOString());
+            setNotesUnreadCount(0);
+          }
+        }, [notesOpen]);
 
         useEffect(() => {
           if (!notesOpen) return;
@@ -2934,7 +2972,9 @@
           <>
             <div className="user-bar">
               <button className="plan-link" onClick={() => openPlan()}>📖 Read the Plan</button>
-              <button className="plan-link" onClick={() => setNotesOpen(true)}>📝 Notes</button>
+              <button className="plan-link" onClick={() => setNotesOpen(true)}>
+                📝 Notes{notesUnreadCount > 0 && <span className="notes-badge">{notesUnreadCount}</span>}
+              </button>
               <span className="user-name">{user.displayName || user.email}</span>
               {isAdmin && <span className="user-admin">admin</span>}
               <button onClick={handleSignOut}>Sign out</button>
