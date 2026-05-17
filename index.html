@@ -660,6 +660,154 @@
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
+
+    /* ─── Plan Request Wizard ─── */
+    .wizard-container {
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 32px 28px;
+      margin-top: 24px;
+    }
+    .wizard-progress {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 28px;
+    }
+    .wizard-progress-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #333;
+      transition: background 0.2s;
+    }
+    .wizard-progress-dot.active { background: #d4a04a; }
+    .wizard-progress-dot.completed { background: #22c55e; }
+    .wizard-step-title {
+      font-size: 22px;
+      color: #fff;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    .wizard-step-subtitle {
+      font-size: 14px;
+      color: #aaa;
+      line-height: 1.5;
+      margin: 0 0 20px;
+    }
+    .wizard-input, .wizard-textarea {
+      width: 100%;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #e8e8e8;
+      font-size: 14px;
+      font-family: inherit;
+      margin-bottom: 16px;
+      box-sizing: border-box;
+    }
+    .wizard-textarea { min-height: 100px; resize: vertical; }
+    .wizard-input:focus, .wizard-textarea:focus {
+      outline: none;
+      border-color: #d4a04a;
+    }
+    .wizard-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .wizard-card {
+      background: #0f0f0f;
+      border: 2px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 18px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .wizard-card:hover { border-color: #444; transform: translateY(-2px); }
+    .wizard-card.selected {
+      border-color: #d4a04a;
+      background: rgba(212, 160, 74, 0.08);
+    }
+    .wizard-card-emoji { font-size: 32px; margin-bottom: 6px; }
+    .wizard-card-label { color: #ddd; font-size: 13px; font-weight: 500; }
+    .wizard-nav {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 24px;
+      gap: 12px;
+    }
+    .wizard-nav-btn {
+      padding: 10px 20px;
+      border-radius: 7px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+    }
+    .wizard-nav-back {
+      background: transparent;
+      color: #aaa;
+      border: 1px solid #333;
+    }
+    .wizard-nav-back:hover { color: #fff; border-color: #555; }
+    .wizard-nav-next {
+      background: #d4a04a;
+      color: #1a1a1a;
+    }
+    .wizard-nav-next:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .wizard-nav-submit {
+      background: #22c55e;
+      color: #fff;
+      padding: 12px 24px;
+      font-size: 15px;
+    }
+    .wizard-nav-submit:hover { background: #16a34a; }
+    .wizard-nav-submit:disabled { background: #444; cursor: not-allowed; }
+    .wizard-review-item {
+      background: #0f0f0f;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+    }
+    .wizard-review-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #888;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .wizard-review-value { color: #ddd; font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
+    .wizard-success {
+      text-align: center;
+      padding: 50px 20px;
+    }
+    .wizard-success-emoji { font-size: 56px; margin-bottom: 16px; }
+    .wizard-success-title {
+      font-size: 24px;
+      color: #fff;
+      margin: 0 0 12px;
+    }
+    .wizard-success-message {
+      color: #aaa;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 400px;
+      margin: 0 auto 24px;
+    }
+    .wizard-success-btn {
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 7px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -3683,6 +3831,19 @@
         const [planConcerns, setPlanConcerns] = useState([]);
         const [openConcernForm, setOpenConcernForm] = useState(null);
         const [concernFormText, setConcernFormText] = useState("");
+        const [wizardOpen, setWizardOpen] = useState(false);
+        const [wizardStep, setWizardStep] = useState(1);
+        const [wizardForm, setWizardForm] = useState({
+          planType: '',
+          title: '',
+          description: '',
+          specificGoals: '',
+          timeline: '',
+          contactPreference: '',
+          extraInfo: '',
+        });
+        const [wizardSubmitting, setWizardSubmitting] = useState(false);
+        const [wizardSubmitted, setWizardSubmitted] = useState(false);
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -3952,6 +4113,42 @@
           await window.firebaseDeletePlanConcern(concernId);
         };
 
+        const handleSubmitPlanRequest = async () => {
+          setWizardSubmitting(true);
+          try {
+            await window.firebaseAddPlanRequest({
+              ...wizardForm,
+              authorUid: user.uid,
+              authorName: user.displayName || user.email,
+              authorEmail: user.email,
+              createdAt: window.firebaseServerTimestamp(),
+              status: 'new',
+              adminNotes: '',
+              statusUpdatedAt: null,
+            });
+            setWizardSubmitted(true);
+          } catch (err) {
+            alert("Couldn't submit request: " + err.message);
+          } finally {
+            setWizardSubmitting(false);
+          }
+        };
+
+        const resetWizard = () => {
+          setWizardOpen(false);
+          setWizardStep(1);
+          setWizardForm({
+            planType: '',
+            title: '',
+            description: '',
+            specificGoals: '',
+            timeline: '',
+            contactPreference: '',
+            extraInfo: '',
+          });
+          setWizardSubmitted(false);
+        };
+
         const renderPlanWithConcerns = (markdown) => {
           const html = window.marked.parse(markdown);
           const parser = new DOMParser();
@@ -4140,16 +4337,32 @@
               )}
               {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
                 <div className="gap-view">
-                  <div className="gap-hero">
-                    <div className="gap-hero-icon">🏗️</div>
-                    <div className="gap-hero-title">Get a Custom Plan</div>
-                    <div className="gap-hero-subtitle">
-                      Want Lee to build you a custom plan? Tell him what you want and he'll
-                      handle the rest. You just need to share what's on your mind — Lee figures
-                      out the details, does the work, and delivers the plan.
+                  {!wizardOpen && (
+                    <div className="gap-hero">
+                      <div className="gap-hero-icon">🏗️</div>
+                      <div className="gap-hero-title">Get a Custom Plan</div>
+                      <div className="gap-hero-subtitle">
+                        Want Lee to build you a custom plan? Tell him what you want and he'll
+                        handle the rest. You just need to share what's on your mind — Lee figures
+                        out the details, does the work, and delivers the plan.
+                      </div>
+                      <button className="gap-cta-btn" onClick={() => setWizardOpen(true)}>
+                        Start Your Request
+                      </button>
                     </div>
-                    <button className="gap-cta-btn">Start Your Request (coming soon)</button>
-                  </div>
+                  )}
+                  {wizardOpen && (
+                    <div className="wizard-container" style={{textAlign: 'center', color: '#888'}}>
+                      Wizard UI ships in Round 3B-ii. State is wired — closing
+                      this resets the form.
+                      <div style={{marginTop: 16}}>
+                        <button className="wizard-nav-btn wizard-nav-back"
+                                onClick={resetWizard}>
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
