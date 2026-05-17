@@ -368,7 +368,7 @@
     }
     .main-content.section-plan {
       margin-left: 220px;
-      min-height: 100vh;
+      height: 100vh;
       background: #0a0a0a;
       overflow-y: auto;
     }
@@ -428,6 +428,8 @@
       .main-content.section-plan {
         margin-left: 0;
         margin-bottom: 60px;
+        height: calc(100vh - 60px);
+        overflow-y: auto;
       }
       .plan-view { padding: 24px 16px 80px; }
     }
