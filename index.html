@@ -1094,9 +1094,6 @@
       appId: "1:543444366388:web:8a9ab00f33dade21f50661"
     };
 
-    // ─── ADMIN EMAIL (Lee's Google account — full edit access) ───
-    const ADMIN_EMAIL = "epiccultivations@gmail.com";
-
     // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -1120,11 +1117,9 @@
       });
     };
     window.firebaseServerTimestamp = serverTimestamp;
-    window.ADMIN_EMAIL = ADMIN_EMAIL;
 
     window.firebaseCheckAllowedAndGetRole = async (email) => {
       if (!email) return { allowed: false, role: null };
-      if (email === ADMIN_EMAIL) return { allowed: true, role: 'admin' };
       try {
         const snap = await getDoc(doc(db, "allowed_users", email));
         if (!snap.exists()) return { allowed: false, role: null };
@@ -4720,8 +4715,7 @@
         useEffect(() => {
           if (!user || !isAllowed) return;
           if (!['admin', 'family'].includes(userRole)) return;
-          const isAdmin = user.email === window.ADMIN_EMAIL;
-          const ownUid = isAdmin ? undefined : user.uid;
+          const ownUid = userRole === 'admin' ? undefined : user.uid;
           const unsub = window.firebasePlanRequestsSubscribe((requests) => {
             setPlanRequests(requests);
           }, ownUid);
@@ -4731,8 +4725,7 @@
         useEffect(() => {
           if (!user || !isAllowed) return;
           if (!['admin', 'family', 'friend'].includes(userRole)) return;
-          const isAdmin = user.email === window.ADMIN_EMAIL;
-          const ownUid = isAdmin ? undefined : user.uid;
+          const ownUid = userRole === 'admin' ? undefined : user.uid;
           setPitchesLoading(true);
           const unsub = window.firebaseIdeaPitchesSubscribe((newPitches) => {
             setPitches(newPitches);
@@ -4771,6 +4764,7 @@
             authorUid: user.uid,
             authorName: user.displayName || user.email,
             authorEmail: user.email,
+            authorRole: userRole,
             createdAt: window.firebaseServerTimestamp(),
             parentNoteId: null,
           });
@@ -4785,6 +4779,7 @@
             authorUid: user.uid,
             authorName: user.displayName || user.email,
             authorEmail: user.email,
+            authorRole: userRole,
             createdAt: window.firebaseServerTimestamp(),
             parentNoteId: parentId,
           });
@@ -4993,7 +4988,7 @@
             concerns: planConcerns,
             user,
             userRole,
-            isAdmin: user.email === window.ADMIN_EMAIL,
+            isAdmin: userRole === 'admin',
             openConcernForm,
             setOpenConcernForm,
             concernFormText,
@@ -5089,7 +5084,7 @@
         }
 
         // Authenticated — show the main app with sidebar navigation
-        const isAdmin = user.email === window.ADMIN_EMAIL;
+        const isAdmin = userRole === 'admin';
         const unresolvedConcernsCount = isAdmin
           ? planConcerns.filter(c => !c.resolved).length
           : 0;
@@ -5198,9 +5193,9 @@
                     <>
                       <div className="gap-list-header">
                         <h2 className="gap-list-title">
-                          {(user.email === window.ADMIN_EMAIL) ? 'All Plan Requests' : 'Your Plan Requests'}
+                          {isAdmin ? 'All Plan Requests' : 'Your Plan Requests'}
                         </h2>
-                        {(user.email !== window.ADMIN_EMAIL) && (
+                        {!isAdmin && (
                           <button className="gap-list-new-btn" onClick={() => setWizardOpen(true)}>
                             + New Request
                           </button>
@@ -5210,7 +5205,7 @@
                         <RequestCard
                           key={req.id}
                           request={req}
-                          isAdmin={user.email === window.ADMIN_EMAIL}
+                          isAdmin={isAdmin}
                           user={user}
                           expanded={expandedRequestId === req.id}
                           onToggleExpand={() => setExpandedRequestId(expandedRequestId === req.id ? null : req.id)}
@@ -5283,7 +5278,7 @@
                                   <span className="notes-author">
                                     {note.authorName}{note.authorUid === user.uid ? " (you)" : ""}
                                   </span>
-                                  {note.authorEmail === window.ADMIN_EMAIL &&
+                                  {note.authorRole === 'admin' &&
                                     <span className="notes-admin-badge">admin</span>}
                                   <span className="notes-time">· {relativeTime(note.createdAt)}</span>
                                 </div>
@@ -5330,7 +5325,7 @@
                                             <span className="notes-author">
                                               {reply.authorName}{reply.authorUid === user.uid ? " (you)" : ""}
                                             </span>
-                                            {reply.authorEmail === window.ADMIN_EMAIL &&
+                                            {reply.authorRole === 'admin' &&
                                               <span className="notes-admin-badge">admin</span>}
                                             <span className="notes-time">· {relativeTime(reply.createdAt)}</span>
                                           </div>
