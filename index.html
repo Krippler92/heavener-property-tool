@@ -3800,6 +3800,226 @@
         );
       }
 
+      // ─── Plan Wizard ───
+      function PlanWizard({
+        wizardStep, setWizardStep,
+        wizardForm, setWizardForm,
+        wizardSubmitting, wizardSubmitted,
+        handleSubmitPlanRequest, resetWizard,
+      }) {
+        const TYPES = [
+          { value: 'homestead', emoji: '🏡', label: 'Homestead' },
+          { value: 'business', emoji: '💼', label: 'Business Idea' },
+          { value: 'build', emoji: '🔨', label: 'Build Project' },
+          { value: 'goal', emoji: '🎯', label: 'Personal Goal' },
+          { value: 'surprise', emoji: '✨', label: 'Surprise Me!' },
+        ];
+        const TIMELINES = [
+          { value: 'asap', emoji: '🔥', label: 'ASAP' },
+          { value: 'months', emoji: '📅', label: 'Next few months' },
+          { value: 'year', emoji: '🗓️', label: 'This year sometime' },
+          { value: 'exploratory', emoji: '🌱', label: 'Just exploring' },
+        ];
+        const CONTACTS = [
+          { value: 'text', emoji: '💬', label: 'Text' },
+          { value: 'call', emoji: '📞', label: 'Call' },
+          { value: 'in-person', emoji: '👋', label: 'In-person' },
+          { value: 'any', emoji: '🤷', label: 'Any way' },
+        ];
+
+        if (wizardSubmitted) {
+          return (
+            <div className="wizard-container">
+              <div className="wizard-success">
+                <div className="wizard-success-emoji">🎉</div>
+                <div className="wizard-success-title">Your request is in!</div>
+                <div className="wizard-success-message">
+                  Lee will start brewing up your plan. Check back here for updates —
+                  you'll see when he starts working on it.
+                </div>
+                <button className="wizard-success-btn" onClick={resetWizard}>
+                  Done
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        const update = (key, value) => setWizardForm(f => ({ ...f, [key]: value }));
+
+        const canProceed = () => {
+          if (wizardStep === 1) return wizardForm.planType && wizardForm.title.trim();
+          if (wizardStep === 2) return wizardForm.description.trim();
+          if (wizardStep === 3) return wizardForm.specificGoals.trim();
+          if (wizardStep === 4) return wizardForm.timeline && wizardForm.contactPreference;
+          return true;
+        };
+
+        const TYPE_LABEL = TYPES.find(t => t.value === wizardForm.planType)?.label || wizardForm.planType;
+        const TIMELINE_LABEL = TIMELINES.find(t => t.value === wizardForm.timeline)?.label || wizardForm.timeline;
+        const CONTACT_LABEL = CONTACTS.find(c => c.value === wizardForm.contactPreference)?.label || wizardForm.contactPreference;
+
+        return (
+          <div className="wizard-container">
+            <div className="wizard-progress">
+              {[1,2,3,4,5].map(n => (
+                <div key={n} className={`wizard-progress-dot${n === wizardStep ? ' active' : n < wizardStep ? ' completed' : ''}`} />
+              ))}
+            </div>
+
+            {wizardStep === 1 && (
+              <>
+                <div className="wizard-step-title">What kind of plan?</div>
+                <div className="wizard-step-subtitle">Pick one — there's no wrong answer.</div>
+                <div className="wizard-card-grid">
+                  {TYPES.map(t => (
+                    <div key={t.value}
+                      className={`wizard-card${wizardForm.planType === t.value ? ' selected' : ''}`}
+                      onClick={() => update('planType', t.value)}>
+                      <div className="wizard-card-emoji">{t.emoji}</div>
+                      <div className="wizard-card-label">{t.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <input
+                  className="wizard-input"
+                  placeholder="What should we call it? (e.g. 'Greenhouse expansion')"
+                  value={wizardForm.title}
+                  onChange={(e) => update('title', e.target.value)}
+                />
+              </>
+            )}
+
+            {wizardStep === 2 && (
+              <>
+                <div className="wizard-step-title">Tell me about it</div>
+                <div className="wizard-step-subtitle">
+                  The more you share, the better the plan. Just talk it out —
+                  Lee will figure out the details.
+                </div>
+                <textarea
+                  className="wizard-textarea"
+                  placeholder="What do you want? What's the situation?"
+                  value={wizardForm.description}
+                  onChange={(e) => update('description', e.target.value)}
+                />
+              </>
+            )}
+
+            {wizardStep === 3 && (
+              <>
+                <div className="wizard-step-title">What does success look like?</div>
+                <div className="wizard-step-subtitle">
+                  When this plan is done, what will be different?
+                </div>
+                <textarea
+                  className="wizard-textarea"
+                  placeholder="The goal, what you want to achieve..."
+                  value={wizardForm.specificGoals}
+                  onChange={(e) => update('specificGoals', e.target.value)}
+                />
+              </>
+            )}
+
+            {wizardStep === 4 && (
+              <>
+                <div className="wizard-step-title">When do you want this?</div>
+                <div className="wizard-card-grid">
+                  {TIMELINES.map(t => (
+                    <div key={t.value}
+                      className={`wizard-card${wizardForm.timeline === t.value ? ' selected' : ''}`}
+                      onClick={() => update('timeline', t.value)}>
+                      <div className="wizard-card-emoji">{t.emoji}</div>
+                      <div className="wizard-card-label">{t.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="wizard-step-title" style={{marginTop: 24}}>How should Lee reach you?</div>
+                <div className="wizard-card-grid">
+                  {CONTACTS.map(c => (
+                    <div key={c.value}
+                      className={`wizard-card${wizardForm.contactPreference === c.value ? ' selected' : ''}`}
+                      onClick={() => update('contactPreference', c.value)}>
+                      <div className="wizard-card-emoji">{c.emoji}</div>
+                      <div className="wizard-card-label">{c.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <textarea
+                  className="wizard-textarea"
+                  placeholder="Anything else? (optional)"
+                  value={wizardForm.extraInfo}
+                  onChange={(e) => update('extraInfo', e.target.value)}
+                />
+              </>
+            )}
+
+            {wizardStep === 5 && (
+              <>
+                <div className="wizard-step-title">Look good?</div>
+                <div className="wizard-step-subtitle">Lee will get started once you submit.</div>
+                <div className="wizard-review-item">
+                  <div className="wizard-review-label">Plan type</div>
+                  <div className="wizard-review-value">{TYPE_LABEL}</div>
+                </div>
+                <div className="wizard-review-item">
+                  <div className="wizard-review-label">Title</div>
+                  <div className="wizard-review-value">{wizardForm.title}</div>
+                </div>
+                <div className="wizard-review-item">
+                  <div className="wizard-review-label">Description</div>
+                  <div className="wizard-review-value">{wizardForm.description}</div>
+                </div>
+                <div className="wizard-review-item">
+                  <div className="wizard-review-label">Goals</div>
+                  <div className="wizard-review-value">{wizardForm.specificGoals}</div>
+                </div>
+                <div className="wizard-review-item">
+                  <div className="wizard-review-label">Timeline</div>
+                  <div className="wizard-review-value">{TIMELINE_LABEL}</div>
+                </div>
+                <div className="wizard-review-item">
+                  <div className="wizard-review-label">Contact preference</div>
+                  <div className="wizard-review-value">{CONTACT_LABEL}</div>
+                </div>
+                {wizardForm.extraInfo && (
+                  <div className="wizard-review-item">
+                    <div className="wizard-review-label">Extra info</div>
+                    <div className="wizard-review-value">{wizardForm.extraInfo}</div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="wizard-nav">
+              <button
+                className="wizard-nav-btn wizard-nav-back"
+                onClick={() => wizardStep === 1 ? resetWizard() : setWizardStep(wizardStep - 1)}
+              >
+                {wizardStep === 1 ? 'Cancel' : 'Back'}
+              </button>
+              {wizardStep < 5 ? (
+                <button
+                  className="wizard-nav-btn wizard-nav-next"
+                  onClick={() => setWizardStep(wizardStep + 1)}
+                  disabled={!canProceed()}
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  className="wizard-nav-btn wizard-nav-submit"
+                  onClick={handleSubmitPlanRequest}
+                  disabled={wizardSubmitting}
+                >
+                  {wizardSubmitting ? 'Sending...' : '🎉 Send it to Lee!'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
@@ -4352,16 +4572,16 @@
                     </div>
                   )}
                   {wizardOpen && (
-                    <div className="wizard-container" style={{textAlign: 'center', color: '#888'}}>
-                      Wizard UI ships in Round 3B-ii. State is wired — closing
-                      this resets the form.
-                      <div style={{marginTop: 16}}>
-                        <button className="wizard-nav-btn wizard-nav-back"
-                                onClick={resetWizard}>
-                          Close
-                        </button>
-                      </div>
-                    </div>
+                    <PlanWizard
+                      wizardStep={wizardStep}
+                      setWizardStep={setWizardStep}
+                      wizardForm={wizardForm}
+                      setWizardForm={setWizardForm}
+                      wizardSubmitting={wizardSubmitting}
+                      wizardSubmitted={wizardSubmitted}
+                      handleSubmitPlanRequest={handleSubmitPlanRequest}
+                      resetWizard={resetWizard}
+                    />
                   )}
                 </div>
               )}
