@@ -832,7 +832,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, deleteDoc, doc, getDoc, onSnapshot, query, orderBy, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, getDoc, onSnapshot, query, orderBy, serverTimestamp, updateDoc, where } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
     // ─── FIREBASE CONFIG (replace these placeholders with your Firebase project keys) ───
     const firebaseConfig = {
@@ -969,27 +969,21 @@
       if (ownUid) {
         q = query(
           collection(db, "plan_requests"),
+          where("authorUid", "==", ownUid),
           orderBy("createdAt", "desc")
         );
-        return onSnapshot(q, (snapshot) => {
-          const all = snapshot.docs.map(d => ({
-            ...d.data(),
-            id: d.id,
-            createdAt: d.data().createdAt?.toDate?.()?.toISOString()
-              || new Date().toISOString(),
-          }));
-          cb(all.filter(r => r.authorUid === ownUid));
-        });
+      } else {
+        q = query(collection(db, "plan_requests"), orderBy("createdAt", "desc"));
       }
-      q = query(collection(db, "plan_requests"), orderBy("createdAt", "desc"));
       return onSnapshot(q, (snapshot) => {
-        const all = snapshot.docs.map(d => ({
+        const requests = snapshot.docs.map(d => ({
           ...d.data(),
           id: d.id,
           createdAt: d.data().createdAt?.toDate?.()?.toISOString()
             || new Date().toISOString(),
+          statusUpdatedAt: d.data().statusUpdatedAt?.toDate?.()?.toISOString() || null,
         }));
-        cb(all);
+        cb(requests);
       });
     };
 
@@ -4064,6 +4058,9 @@
         });
         const [wizardSubmitting, setWizardSubmitting] = useState(false);
         const [wizardSubmitted, setWizardSubmitted] = useState(false);
+        const [planRequests, setPlanRequests] = useState([]);
+        const [expandedRequestId, setExpandedRequestId] = useState(null);
+        const [adminNotesDrafts, setAdminNotesDrafts] = useState({});
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -4150,6 +4147,17 @@
           });
           return () => unsub();
         }, [user, isAllowed]);
+
+        useEffect(() => {
+          if (!user || !isAllowed) return;
+          if (!['admin', 'family'].includes(userRole)) return;
+          const isAdmin = user.email === window.ADMIN_EMAIL;
+          const ownUid = isAdmin ? undefined : user.uid;
+          const unsub = window.firebasePlanRequestsSubscribe((requests) => {
+            setPlanRequests(requests);
+          }, ownUid);
+          return () => unsub();
+        }, [user, isAllowed, userRole]);
 
         useEffect(() => {
           if (notesOpen) {
@@ -4367,6 +4375,30 @@
             extraInfo: '',
           });
           setWizardSubmitted(false);
+        };
+
+        const handleUpdateRequestStatus = async (requestId, newStatus) => {
+          await window.firebaseUpdatePlanRequest(requestId, {
+            status: newStatus,
+            statusUpdatedAt: window.firebaseServerTimestamp(),
+          });
+        };
+
+        const handleUpdateRequestAdminNotes = async (requestId, notes) => {
+          await window.firebaseUpdatePlanRequest(requestId, {
+            adminNotes: notes,
+            statusUpdatedAt: window.firebaseServerTimestamp(),
+          });
+          setAdminNotesDrafts(d => {
+            const next = { ...d };
+            delete next[requestId];
+            return next;
+          });
+        };
+
+        const handleDeleteRequest = async (requestId) => {
+          if (!confirm("Delete this request?")) return;
+          await window.firebaseDeletePlanRequest(requestId);
         };
 
         const renderPlanWithConcerns = (markdown) => {
