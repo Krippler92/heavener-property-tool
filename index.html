@@ -497,16 +497,23 @@
     window.firebaseServerTimestamp = serverTimestamp;
     window.ADMIN_EMAIL = ADMIN_EMAIL;
 
-    window.firebaseCheckAllowed = async (email) => {
-      if (!email) return false;
-      if (email === ADMIN_EMAIL) return true;
+    window.firebaseCheckAllowedAndGetRole = async (email) => {
+      if (!email) return { allowed: false, role: null };
+      if (email === ADMIN_EMAIL) return { allowed: true, role: 'admin' };
       try {
         const snap = await getDoc(doc(db, "allowed_users", email));
-        return snap.exists();
+        if (!snap.exists()) return { allowed: false, role: null };
+        return { allowed: true, role: snap.data().role || 'guest' };
       } catch (e) {
-        console.warn("allowlist check failed:", e);
-        return false;
+        console.warn("role check failed:", e);
+        return { allowed: false, role: null };
       }
+    };
+
+    // Keep old signature for any callers that don't need role
+    window.firebaseCheckAllowed = async (email) => {
+      const result = await window.firebaseCheckAllowedAndGetRole(email);
+      return result.allowed;
     };
 
     window.firebaseAddNote = (data) => addDoc(collection(db, "family_notes"), data);
@@ -3101,6 +3108,46 @@
         },
       ];
 
+      // ─── Role-based access ───
+      const PLAN_SECTION_ACCESS = {
+        'For Family': ['admin', 'family'],
+        'Current Focus': ['admin', 'family', 'friend', 'investor'],
+        'Timeline': ['admin', 'family', 'friend', 'investor'],
+        'Financials': ['admin', 'family', 'friend', 'investor'],
+        'Build Plans': ['admin', 'family', 'friend', 'investor'],
+        'Property & Layout': ['admin', 'family', 'friend', 'investor', 'guest'],
+        'Execution Sequence': ['admin', 'family', 'friend', 'investor'],
+        'If This Then That': ['admin', 'family', 'friend', 'investor'],
+        'Vision & Principles': ['admin', 'family', 'friend', 'investor', 'guest'],
+        'Business & Legal': ['admin', 'family', 'friend', 'investor'],
+        'Open Decisions': ['admin', 'family', 'friend', 'investor'],
+        'Revisions': ['admin', 'family', 'friend'],
+        'Companion Documents': ['admin', 'family', 'friend'],
+      };
+
+      function filterPlanByRole(markdown, role) {
+        if (!role) return '';
+        const sections = markdown.split(/\n(?=# )/);
+        let filtered = sections.filter(section => {
+          if (!section.startsWith('# ')) return true;
+          const firstLine = section.split('\n')[0];
+          for (const [key, roles] of Object.entries(PLAN_SECTION_ACCESS)) {
+            if (firstLine.includes(key)) {
+              return roles.includes(role);
+            }
+          }
+          return true;
+        }).join('\n');
+
+        if (role !== 'admin' && role !== 'family') {
+          filtered = filtered.replace(
+            /\n## Long-Term Succession Architecture[\s\S]*?(?=\n## |\n# |$)/,
+            ''
+          );
+        }
+        return filtered;
+      }
+
       // ─── Sidebar navigation ───
       function Sidebar({
         activeSection,
@@ -3108,24 +3155,29 @@
         onOpenNotes,
         user,
         isAdmin,
+        userRole,
         onSignOut,
         notesUnreadCount,
         flagsUnreadCount
       }) {
+        const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
+        const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
         return (
           <div className="sidebar">
             <div className="sidebar-brand">HEAVENER</div>
             <div className="sidebar-nav">
-              <button
-                className={`sidebar-item${activeSection === 'map' ? ' active' : ''}`}
-                onClick={() => onSectionChange('map')}
-              >
-                <span className="sidebar-item-icon-mobile">🗺️</span>
-                <span>Map</span>
-                {flagsUnreadCount > 0 && (
-                  <span className="sidebar-item-badge">{flagsUnreadCount}</span>
-                )}
-              </button>
+              {canSeeMap && (
+                <button
+                  className={`sidebar-item${activeSection === 'map' ? ' active' : ''}`}
+                  onClick={() => onSectionChange('map')}
+                >
+                  <span className="sidebar-item-icon-mobile">🗺️</span>
+                  <span>Map</span>
+                  {flagsUnreadCount > 0 && (
+                    <span className="sidebar-item-badge">{flagsUnreadCount}</span>
+                  )}
+                </button>
+              )}
               <button
                 className={`sidebar-item${activeSection === 'plan' ? ' active' : ''}`}
                 onClick={() => onSectionChange('plan')}
@@ -3133,20 +3185,34 @@
                 <span className="sidebar-item-icon-mobile">📖</span>
                 <span>Plan</span>
               </button>
-              <button
-                className="sidebar-item"
-                onClick={() => onOpenNotes()}
-              >
-                <span className="sidebar-item-icon-mobile">📝</span>
-                <span>Notes</span>
-                {notesUnreadCount > 0 && (
-                  <span className="sidebar-item-badge">{notesUnreadCount}</span>
-                )}
-              </button>
+              {canSeeNotes && (
+                <button
+                  className="sidebar-item"
+                  onClick={() => onOpenNotes()}
+                >
+                  <span className="sidebar-item-icon-mobile">📝</span>
+                  <span>Notes</span>
+                  {notesUnreadCount > 0 && (
+                    <span className="sidebar-item-badge">{notesUnreadCount}</span>
+                  )}
+                </button>
+              )}
             </div>
             <div className="sidebar-user">
               <div className="sidebar-user-name">{user.displayName || user.email}</div>
               {isAdmin && <span className="sidebar-user-admin">admin</span>}
+              {!isAdmin && userRole && (
+                <span className="sidebar-user-admin" style={{
+                  color: userRole === 'family' ? '#22c55e'
+                    : userRole === 'friend' ? '#3b82f6'
+                    : userRole === 'investor' ? '#a855f7'
+                    : '#888',
+                  background: userRole === 'family' ? 'rgba(34, 197, 94, 0.15)'
+                    : userRole === 'friend' ? 'rgba(59, 130, 246, 0.15)'
+                    : userRole === 'investor' ? 'rgba(168, 85, 247, 0.15)'
+                    : 'rgba(150, 150, 150, 0.15)'
+                }}>{userRole}</span>
+              )}
               <button className="sidebar-user-signout" onClick={onSignOut}>Sign out</button>
             </div>
           </div>
@@ -3159,6 +3225,7 @@
         const [authLoading, setAuthLoading] = useState(true);
         const [authError, setAuthError] = useState(null);
         const [isAllowed, setIsAllowed] = useState(null);
+        const [userRole, setUserRole] = useState(null);
         const [activeSection, setActiveSection] = useState('map');
         const [planContent, setPlanContent] = useState(null);
         const [planLoading, setPlanLoading] = useState(false);
@@ -3190,14 +3257,29 @@
         }, []);
 
         useEffect(() => {
-          if (!user) { setIsAllowed(null); return; }
+          if (!user) { setIsAllowed(null); setUserRole(null); return; }
           let cancelled = false;
           (async () => {
-            const allowed = await window.firebaseCheckAllowed(user.email);
-            if (!cancelled) setIsAllowed(allowed);
+            const result = await window.firebaseCheckAllowedAndGetRole(user.email);
+            if (!cancelled) {
+              setIsAllowed(result.allowed);
+              setUserRole(result.role);
+            }
           })();
           return () => { cancelled = true; };
         }, [user]);
+
+        useEffect(() => {
+          if (!userRole) return;
+          const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
+          const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
+          if (activeSection === 'map' && !canSeeMap) {
+            setActiveSection('plan');
+          }
+          if (activeSection === 'notes' && !canSeeNotes) {
+            setActiveSection('plan');
+          }
+        }, [userRole, activeSection]);
 
         useEffect(() => {
           if (activeSection !== 'plan') return;
@@ -3453,12 +3535,13 @@
               onOpenNotes={() => setNotesOpen(true)}
               user={user}
               isAdmin={isAdmin}
+              userRole={userRole}
               onSignOut={handleSignOut}
               notesUnreadCount={notesUnreadCount}
               flagsUnreadCount={flagsUnreadCount}
             />
             <div className={`main-content section-${activeSection}`}>
-              {activeSection === 'map' && (
+              {activeSection === 'map' && ['admin', 'family', 'friend'].includes(userRole) && (
                 <HeavenerProperty3D
                   currentUser={user}
                   isAdmin={isAdmin}
@@ -3470,8 +3553,15 @@
                   {planLoading && <div className="plan-view-loading">Loading farm plan…</div>}
                   {planError && <div className="plan-view-error">Couldn't load plan: {planError}</div>}
                   {planContent && (() => {
+                    const filteredPlanContent = filterPlanByRole(planContent, userRole);
+                    const canSeeLaborFlags = ['admin', 'family', 'friend'].includes(userRole);
+                    if (!canSeeLaborFlags) {
+                      return (
+                        <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(filteredPlanContent) }} />
+                      );
+                    }
                     const laborFlagsRegex = /(\n## 🚩 Labor Flags[\s\S]*?)(?=\n## |\n# |$)/;
-                    const match = planContent.match(laborFlagsRegex);
+                    const match = filteredPlanContent.match(laborFlagsRegex);
                     const renderFlags = () => (
                       <div className="labor-flags-section">
                         <div className="labor-flags-title">🚩 Labor Flags</div>
@@ -3496,12 +3586,12 @@
                       return (
                         <>
                           {renderFlags()}
-                          <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(planContent) }} />
+                          <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(filteredPlanContent) }} />
                         </>
                       );
                     }
-                    const before = planContent.slice(0, match.index);
-                    const after = planContent.slice(match.index + match[0].length);
+                    const before = filteredPlanContent.slice(0, match.index);
+                    const after = filteredPlanContent.slice(match.index + match[0].length);
                     return (
                       <>
                         <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(before) }} />
