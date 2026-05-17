@@ -808,6 +808,108 @@
       font-weight: 600;
       cursor: pointer;
     }
+
+    /* ─── Request Card Details ─── */
+    .gap-request-card.expanded { border-color: #d4a04a; }
+    .gap-request-details {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #2a2a2a;
+    }
+    .gap-request-field { margin-bottom: 14px; }
+    .gap-request-field-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #888;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .gap-request-field-value {
+      color: #ddd;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .gap-admin-controls {
+      background: rgba(212, 160, 74, 0.06);
+      border: 1px solid rgba(212, 160, 74, 0.2);
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 14px;
+    }
+    .gap-admin-controls-title {
+      color: #d4a04a;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+    .gap-status-select {
+      width: 100%;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #ddd;
+      font-size: 13px;
+      margin-bottom: 12px;
+      cursor: pointer;
+    }
+    .gap-admin-notes-textarea {
+      width: 100%;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: #e8e8e8;
+      font-size: 13px;
+      font-family: inherit;
+      min-height: 80px;
+      resize: vertical;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+    }
+    .gap-admin-save-btn {
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .gap-admin-notes-display {
+      background: rgba(212, 160, 74, 0.08);
+      border-left: 3px solid #d4a04a;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    .gap-admin-notes-label {
+      color: #d4a04a;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .gap-admin-notes-text {
+      color: #ddd;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+    .gap-delete-btn {
+      background: transparent;
+      border: 1px solid #ef4444;
+      color: #ef4444;
+      padding: 6px 12px;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .gap-delete-btn:hover { background: rgba(239, 68, 68, 0.1); }
   </style>
 </head>
 <body>
@@ -4014,6 +4116,108 @@
         );
       }
 
+      function RequestCard({
+        request, isAdmin, user, expanded, onToggleExpand,
+        onUpdateStatus, onUpdateAdminNotes, onDelete,
+        adminNotesDraft, setAdminNotesDraft
+      }) {
+        const TYPE_EMOJI = {
+          homestead: '🏡', business: '💼', build: '🔨',
+          goal: '🎯', surprise: '✨',
+        };
+        const STATUS_LABEL = {
+          new: '🆕 New', 'in-progress': '🔬 In Progress',
+          completed: '✅ Complete', declined: '❌ Declined', paused: '💤 Paused',
+        };
+        const canDelete = isAdmin || request.authorUid === user.uid;
+        const draftValue = adminNotesDraft !== undefined ? adminNotesDraft : (request.adminNotes || '');
+
+        return (
+          <div className={`gap-request-card${expanded ? ' expanded' : ''}`} onClick={onToggleExpand}>
+            <div className="gap-request-card-header">
+              <div className="gap-request-title">
+                {TYPE_EMOJI[request.planType] || '📋'} {request.title}
+              </div>
+              <span className={`gap-status-badge gap-status-${request.status}`}>
+                {STATUS_LABEL[request.status] || request.status}
+              </span>
+            </div>
+            <div className="gap-request-meta">
+              {isAdmin && `${request.authorName} · `}
+              {new Date(request.createdAt).toLocaleDateString()}
+            </div>
+            {!expanded && (
+              <div className="gap-request-snippet">{request.description}</div>
+            )}
+            {expanded && (
+              <div className="gap-request-details" onClick={(e) => e.stopPropagation()}>
+                <div className="gap-request-field">
+                  <div className="gap-request-field-label">Description</div>
+                  <div className="gap-request-field-value">{request.description}</div>
+                </div>
+                <div className="gap-request-field">
+                  <div className="gap-request-field-label">Goals</div>
+                  <div className="gap-request-field-value">{request.specificGoals}</div>
+                </div>
+                <div className="gap-request-field">
+                  <div className="gap-request-field-label">Timeline</div>
+                  <div className="gap-request-field-value">{request.timeline}</div>
+                </div>
+                <div className="gap-request-field">
+                  <div className="gap-request-field-label">Contact preference</div>
+                  <div className="gap-request-field-value">{request.contactPreference}</div>
+                </div>
+                {request.extraInfo && (
+                  <div className="gap-request-field">
+                    <div className="gap-request-field-label">Extra info</div>
+                    <div className="gap-request-field-value">{request.extraInfo}</div>
+                  </div>
+                )}
+                {request.adminNotes && !isAdmin && (
+                  <div className="gap-admin-notes-display">
+                    <div className="gap-admin-notes-label">Update from Lee</div>
+                    <div className="gap-admin-notes-text">{request.adminNotes}</div>
+                  </div>
+                )}
+                {isAdmin && (
+                  <div className="gap-admin-controls">
+                    <div className="gap-admin-controls-title">Admin Actions</div>
+                    <select
+                      className="gap-status-select"
+                      value={request.status}
+                      onChange={(e) => onUpdateStatus(request.id, e.target.value)}
+                    >
+                      <option value="new">🆕 New</option>
+                      <option value="in-progress">🔬 In Progress</option>
+                      <option value="completed">✅ Complete</option>
+                      <option value="declined">❌ Declined</option>
+                      <option value="paused">💤 Paused</option>
+                    </select>
+                    <textarea
+                      className="gap-admin-notes-textarea"
+                      placeholder="Add a note for the requester..."
+                      value={draftValue}
+                      onChange={(e) => setAdminNotesDraft(e.target.value)}
+                    />
+                    <button
+                      className="gap-admin-save-btn"
+                      onClick={() => onUpdateAdminNotes(request.id, draftValue)}
+                    >
+                      Save Note
+                    </button>
+                  </div>
+                )}
+                {canDelete && (
+                  <button className="gap-delete-btn" onClick={() => onDelete(request.id)}>
+                    Delete Request
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
@@ -4589,7 +4793,7 @@
               )}
               {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
                 <div className="gap-view">
-                  {!wizardOpen && (
+                  {!wizardOpen && planRequests.length === 0 && (
                     <div className="gap-hero">
                       <div className="gap-hero-icon">🏗️</div>
                       <div className="gap-hero-title">Get a Custom Plan</div>
@@ -4602,6 +4806,35 @@
                         Start Your Request
                       </button>
                     </div>
+                  )}
+                  {!wizardOpen && planRequests.length > 0 && (
+                    <>
+                      <div className="gap-list-header">
+                        <h2 className="gap-list-title">
+                          {(user.email === window.ADMIN_EMAIL) ? 'All Plan Requests' : 'Your Plan Requests'}
+                        </h2>
+                        {(user.email !== window.ADMIN_EMAIL) && (
+                          <button className="gap-list-new-btn" onClick={() => setWizardOpen(true)}>
+                            + New Request
+                          </button>
+                        )}
+                      </div>
+                      {planRequests.map(req => (
+                        <RequestCard
+                          key={req.id}
+                          request={req}
+                          isAdmin={user.email === window.ADMIN_EMAIL}
+                          user={user}
+                          expanded={expandedRequestId === req.id}
+                          onToggleExpand={() => setExpandedRequestId(expandedRequestId === req.id ? null : req.id)}
+                          onUpdateStatus={handleUpdateRequestStatus}
+                          onUpdateAdminNotes={handleUpdateRequestAdminNotes}
+                          onDelete={handleDeleteRequest}
+                          adminNotesDraft={adminNotesDrafts[req.id]}
+                          setAdminNotesDraft={(text) => setAdminNotesDrafts(d => ({...d, [req.id]: text}))}
+                        />
+                      ))}
+                    </>
                   )}
                   {wizardOpen && (
                     <PlanWizard
