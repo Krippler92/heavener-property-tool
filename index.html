@@ -661,6 +661,55 @@
       overflow: hidden;
     }
 
+    /* ─── Pitch an Idea section ─── */
+    .pitch-section {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      color: #ddd;
+    }
+    .pitch-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 80px 20px;
+      text-align: center;
+    }
+    .pitch-hero-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .pitch-hero-subtitle {
+      font-size: 16px;
+      color: #aaa;
+      line-height: 1.5;
+    }
+    .pitch-hero-cta {
+      display: inline-block;
+      padding: 12px 28px;
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.15s;
+    }
+    .pitch-hero-cta:hover {
+      background: #e0ad55;
+      transform: translateY(-1px);
+    }
+    .pitch-list-placeholder {
+      text-align: center;
+      color: #888;
+      padding: 40px;
+    }
+
     /* ─── Plan Request Wizard ─── */
     .wizard-container {
       background: #161616;
@@ -1086,6 +1135,28 @@
           statusUpdatedAt: d.data().statusUpdatedAt?.toDate?.()?.toISOString() || null,
         }));
         cb(requests);
+      });
+    };
+
+    window.firebaseIdeaPitchesSubscribe = (cb, ownUid) => {
+      let q;
+      if (ownUid) {
+        q = query(
+          collection(db, "idea_pitches"),
+          where("authorUid", "==", ownUid),
+          orderBy("createdAt", "desc")
+        );
+      } else {
+        q = query(collection(db, "idea_pitches"), orderBy("createdAt", "desc"));
+      }
+      return onSnapshot(q, (snapshot) => {
+        const pitches = snapshot.docs.map(d => ({
+          ...d.data(),
+          id: d.id,
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString()
+            || new Date().toISOString(),
+        }));
+        cb(pitches);
       });
     };
 
@@ -3690,6 +3761,7 @@
         const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
         const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
         const canSeeGetAPlan = ['admin', 'family'].includes(userRole);
+        const canSeePitch = ['admin', 'family', 'friend'].includes(userRole);
         return (
           <div className="sidebar">
             <div className="sidebar-brand">HEAVENER</div>
@@ -3735,6 +3807,15 @@
                 >
                   <span className="sidebar-item-icon-mobile">🏗️</span>
                   <span>Get a Plan</span>
+                </button>
+              )}
+              {canSeePitch && (
+                <button
+                  className={`sidebar-item${activeSection === 'pitch' ? ' active' : ''}`}
+                  onClick={() => onSectionChange('pitch')}
+                >
+                  <span className="sidebar-item-icon-mobile">💡</span>
+                  <span>Pitch an Idea</span>
                 </button>
               )}
             </div>
@@ -4218,6 +4299,40 @@
         );
       }
 
+      // ─── Pitch an Idea section ───
+      function PitchSection({ userRole, userUid, userEmail, pitches, loading }) {
+        if (loading) {
+          return (
+            <div className="pitch-section">
+              <div className="pitch-hero-subtitle">Loading pitches…</div>
+            </div>
+          );
+        }
+        if (pitches.length > 0) {
+          return (
+            <div className="pitch-section">
+              <div className="pitch-list-placeholder">
+                {pitches.length} pitches loaded — list rendering ships in Round 4C
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="pitch-section">
+            <div className="pitch-hero">
+              <div className="pitch-hero-title">💡 Pitch an Idea</div>
+              <div className="pitch-hero-subtitle">Share an idea worth pursuing.</div>
+              <button
+                className="pitch-hero-cta"
+                onClick={() => { /* TODO: Round 4B */ }}
+              >
+                Pitch a New Idea
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
@@ -4265,6 +4380,8 @@
         const [planRequests, setPlanRequests] = useState([]);
         const [expandedRequestId, setExpandedRequestId] = useState(null);
         const [adminNotesDrafts, setAdminNotesDrafts] = useState({});
+        const [pitches, setPitches] = useState([]);
+        const [pitchesLoading, setPitchesLoading] = useState(true);
 
         useEffect(() => {
           const unsub = window.firebaseOnAuthChange((u) => {
@@ -4292,6 +4409,7 @@
           const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
           const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
           const canSeeGetAPlan = ['admin', 'family'].includes(userRole);
+          const canSeePitch = ['admin', 'family', 'friend'].includes(userRole);
           if (activeSection === 'map' && !canSeeMap) {
             setActiveSection('plan');
           }
@@ -4299,6 +4417,9 @@
             setActiveSection('plan');
           }
           if (activeSection === 'get-a-plan' && !canSeeGetAPlan) {
+            setActiveSection('plan');
+          }
+          if (activeSection === 'pitch' && !canSeePitch) {
             setActiveSection('plan');
           }
         }, [userRole, activeSection]);
@@ -4359,6 +4480,19 @@
           const ownUid = isAdmin ? undefined : user.uid;
           const unsub = window.firebasePlanRequestsSubscribe((requests) => {
             setPlanRequests(requests);
+          }, ownUid);
+          return () => unsub();
+        }, [user, isAllowed, userRole]);
+
+        useEffect(() => {
+          if (!user || !isAllowed) return;
+          if (!['admin', 'family', 'friend'].includes(userRole)) return;
+          const isAdmin = user.email === window.ADMIN_EMAIL;
+          const ownUid = isAdmin ? undefined : user.uid;
+          setPitchesLoading(true);
+          const unsub = window.firebaseIdeaPitchesSubscribe((newPitches) => {
+            setPitches(newPitches);
+            setPitchesLoading(false);
           }, ownUid);
           return () => unsub();
         }, [user, isAllowed, userRole]);
@@ -4790,6 +4924,15 @@
                     );
                   })()}
                 </div>
+              )}
+              {activeSection === 'pitch' && ['admin', 'family', 'friend'].includes(userRole) && (
+                <PitchSection
+                  userRole={userRole}
+                  userUid={user.uid}
+                  userEmail={user.email}
+                  pitches={pitches}
+                  loading={pitchesLoading}
+                />
               )}
               {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
                 <div className="gap-view">
