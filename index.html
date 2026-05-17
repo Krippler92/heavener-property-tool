@@ -874,6 +874,91 @@
       color: #aaa;
       line-height: 1.5;
     }
+    .admin-card-clickable { cursor: pointer; }
+
+    /* ─── Manage Admins view ─── */
+    .manage-admins-view {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      color: #ddd;
+    }
+    .manage-admins-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #333;
+    }
+    .manage-admins-back-btn {
+      padding: 6px 12px;
+      background: transparent;
+      color: #aaa;
+      border: 1px solid #333;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .manage-admins-back-btn:hover {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #555;
+    }
+    .manage-admins-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+    }
+    .manage-admins-loading {
+      text-align: center;
+      color: #888;
+      padding: 40px;
+    }
+    .manage-admins-section { margin-bottom: 32px; }
+    .manage-admins-section-heading {
+      font-size: 14px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .manage-admins-user-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .manage-admins-user-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .manage-admins-user-email {
+      font-size: 15px;
+      color: #fff;
+      font-weight: 500;
+    }
+    .manage-admins-user-meta {
+      font-size: 12px;
+      color: #888;
+    }
+    .manage-admins-empty {
+      padding: 16px;
+      background: #1a1a1a;
+      border: 1px dashed #333;
+      border-radius: 6px;
+      color: #888;
+      font-size: 14px;
+      text-align: center;
+    }
 
     /* ─── Plan Request Wizard ─── */
     .wizard-container {
@@ -1326,6 +1411,24 @@
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+    window.firebaseAllowedUsersSubscribe = (cb) => {
+      const q = collection(db, "allowed_users");
+      return onSnapshot(q, (snapshot) => {
+        const users = snapshot.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            email: data.email || d.id,
+            role: data.role || null,
+            addedAt: data.addedAt?.toDate?.()?.toISOString() || null,
+            addedBy: data.addedBy || null,
+          };
+        });
+        users.sort((a, b) => a.email.localeCompare(b.email));
+        cb(users);
+      });
+    };
 
     // Signal to the React app that Firebase is ready
     window.firebaseReady = true;
@@ -4656,8 +4759,32 @@
         );
       }
 
-      // ─── Admin section (placeholder — real content ships in Round 5D+) ───
+      // ─── Admin section ───
       function AdminSection({ userRole, userUid, userEmail }) {
+        const [subView, setSubView] = useState('dashboard');
+        const [allowedUsers, setAllowedUsers] = useState([]);
+        const [allowedUsersLoading, setAllowedUsersLoading] = useState(true);
+
+        useEffect(() => {
+          if (userRole !== 'admin') return;
+          const unsub = window.firebaseAllowedUsersSubscribe((users) => {
+            setAllowedUsers(users);
+            setAllowedUsersLoading(false);
+          });
+          return () => unsub();
+        }, [userRole]);
+
+        if (subView === 'manage-admins') {
+          return (
+            <ManageAdminsView
+              allowedUsers={allowedUsers}
+              loading={allowedUsersLoading}
+              currentAdminEmail={userEmail}
+              onBack={() => setSubView('dashboard')}
+            />
+          );
+        }
+
         return (
           <div className="admin-section">
             <div className="admin-section-header">
@@ -4667,9 +4794,12 @@
               </div>
             </div>
             <div className="admin-card-grid">
-              <div className="admin-card">
+              <div
+                className="admin-card admin-card-clickable"
+                onClick={() => setSubView('manage-admins')}
+              >
                 <div className="admin-card-title">Manage Admins</div>
-                <div className="admin-card-desc">Grant or revoke admin access. Ships in Round 5D.</div>
+                <div className="admin-card-desc">Grant or revoke admin access.</div>
               </div>
               <div className="admin-card">
                 <div className="admin-card-title">Pitches</div>
@@ -4680,6 +4810,83 @@
                 <div className="admin-card-desc">Review plan requests. Migration from Get a Plan tab. Future round.</div>
               </div>
             </div>
+          </div>
+        );
+      }
+
+      // ─── Manage Admins view (shell — actions ship in Round 5D-ii) ───
+      function ManageAdminsView({ allowedUsers, loading, currentAdminEmail, onBack }) {
+        const admins = allowedUsers.filter(u => u.role === 'admin');
+        const otherUsers = allowedUsers.filter(u => u.role !== 'admin');
+
+        const formatAddedAt = (iso) => {
+          if (!iso) return null;
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return null;
+          return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        };
+
+        return (
+          <div className="manage-admins-view">
+            <div className="manage-admins-header">
+              <button className="manage-admins-back-btn" onClick={onBack}>
+                ← Back to Dashboard
+              </button>
+              <h2 className="manage-admins-title">Manage Admins</h2>
+            </div>
+            {loading ? (
+              <div className="manage-admins-loading">Loading users…</div>
+            ) : (
+              <>
+                <div className="manage-admins-section">
+                  <div className="manage-admins-section-heading">
+                    Current Admins ({admins.length})
+                  </div>
+                  {admins.length === 0 ? (
+                    <div className="manage-admins-empty">
+                      No admins assigned. This shouldn't happen — contact the project owner.
+                    </div>
+                  ) : (
+                    admins.map(u => {
+                      const added = formatAddedAt(u.addedAt);
+                      return (
+                        <div key={u.id} className="manage-admins-user-row">
+                          <div className="manage-admins-user-info">
+                            <div className="manage-admins-user-email">
+                              {u.email}{u.email === currentAdminEmail ? ' (you)' : ''}
+                            </div>
+                            {added && (
+                              <div className="manage-admins-user-meta">added {added}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="manage-admins-section">
+                  <div className="manage-admins-section-heading">
+                    Other Users ({otherUsers.length})
+                  </div>
+                  {otherUsers.length === 0 ? (
+                    <div className="manage-admins-empty">
+                      No other users in the allowlist.
+                    </div>
+                  ) : (
+                    otherUsers.map(u => (
+                      <div key={u.id} className="manage-admins-user-row">
+                        <div className="manage-admins-user-info">
+                          <div className="manage-admins-user-email">{u.email}</div>
+                          <div className="manage-admins-user-meta">
+                            {u.role ? u.role : 'no role'}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
         );
       }
