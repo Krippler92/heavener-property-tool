@@ -3352,6 +3352,133 @@
         return Math.abs(hash).toString(36);
       }
 
+      function ConcernAnchor({
+        tag, innerHtml, textContent, concerns, user, userRole, isAdmin,
+        openConcernForm, setOpenConcernForm, concernFormText,
+        setConcernFormText, handlePostConcern, handleResolveConcern,
+        handleUnresolveConcern, handleDeleteConcern
+      }) {
+        const hash = simpleHash(textContent);
+        const myConcerns = concerns.filter(c => c.anchorHash === hash);
+        const hasConcerns = myConcerns.length > 0;
+        const isFormOpen = openConcernForm === hash;
+        const canPost = ['admin', 'family', 'friend', 'investor'].includes(userRole);
+        const TagName = tag;
+
+        return (
+          <div className="concern-anchor">
+            <TagName dangerouslySetInnerHTML={{ __html: innerHtml }} />
+            {canPost && (
+              <button
+                className={`concern-btn${hasConcerns ? ' has-concerns' : ''}`}
+                onClick={() => {
+                  if (isFormOpen) {
+                    setOpenConcernForm(null);
+                    setConcernFormText("");
+                  } else {
+                    setOpenConcernForm(hash);
+                  }
+                }}
+                title={hasConcerns ? `${myConcerns.length} concern(s)` : "Raise a concern"}
+              >
+                {hasConcerns ? '💬' : '+'}
+              </button>
+            )}
+            {myConcerns.length > 0 && (
+              <div className="concern-list">
+                {myConcerns.map(concern => {
+                  const canDelete = isAdmin || concern.authorUid === user.uid;
+                  const canResolve = isAdmin;
+                  return (
+                    <div key={concern.id} className={`concern-card${concern.resolved ? ' resolved' : ''}`}>
+                      <div className="concern-card-meta">
+                        <span className="concern-card-author">
+                          {concern.authorName}{concern.authorUid === user.uid ? ' (you)' : ''}
+                        </span>
+                        <span>· {new Date(concern.createdAt).toLocaleString()}</span>
+                        {concern.resolved && (
+                          <span className="concern-card-resolved-label">resolved</span>
+                        )}
+                      </div>
+                      <div className="concern-card-body">{concern.concernText}</div>
+                      <div className="concern-card-actions">
+                        {canResolve && !concern.resolved && (
+                          <button className="concern-card-action resolve"
+                                  onClick={() => handleResolveConcern(concern.id)}>
+                            Mark Resolved
+                          </button>
+                        )}
+                        {canResolve && concern.resolved && (
+                          <button className="concern-card-action"
+                                  onClick={() => handleUnresolveConcern(concern.id)}>
+                            Reopen
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button className="concern-card-action delete"
+                                  onClick={() => handleDeleteConcern(concern.id)}>
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {isFormOpen && canPost && (
+              <div className="concern-form">
+                <textarea
+                  placeholder="What's your concern about this part of the plan?"
+                  value={concernFormText}
+                  onChange={(e) => setConcernFormText(e.target.value)}
+                  autoFocus
+                />
+                <div className="concern-form-buttons">
+                  <button
+                    className="concern-form-submit"
+                    onClick={() => handlePostConcern(hash, textContent)}
+                    disabled={!concernFormText.trim()}
+                  >
+                    Submit concern
+                  </button>
+                  <button
+                    className="concern-form-cancel"
+                    onClick={() => {
+                      setOpenConcernForm(null);
+                      setConcernFormText("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      function ListWithConcerns({ tag, element, ...props }) {
+        const liElements = Array.from(element.children).filter(c =>
+          c.tagName.toLowerCase() === 'li'
+        );
+        const ListTag = tag;
+        return (
+          <ListTag>
+            {liElements.map((li, i) => (
+              <li key={i} style={{ position: 'relative' }}>
+                <ConcernAnchor
+                  {...props}
+                  tag="span"
+                  innerHtml={li.innerHTML}
+                  textContent={li.textContent}
+                />
+              </li>
+            ))}
+          </ListTag>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
@@ -3648,6 +3775,51 @@
           await window.firebaseDeletePlanConcern(concernId);
         };
 
+        const renderPlanWithConcerns = (markdown) => {
+          const html = window.marked.parse(markdown);
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+          const container = doc.body.firstChild;
+          const elements = Array.from(container.children);
+          const sharedProps = {
+            concerns: planConcerns,
+            user,
+            userRole,
+            isAdmin: user.email === window.ADMIN_EMAIL,
+            openConcernForm,
+            setOpenConcernForm,
+            concernFormText,
+            setConcernFormText,
+            handlePostConcern,
+            handleResolveConcern,
+            handleUnresolveConcern,
+            handleDeleteConcern,
+          };
+
+          return elements.map((el, i) => {
+            const tag = el.tagName.toLowerCase();
+            if (tag === 'ul' || tag === 'ol') {
+              return (
+                <ListWithConcerns key={i} tag={tag} element={el} {...sharedProps} />
+              );
+            }
+            if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'].includes(tag)) {
+              return (
+                <ConcernAnchor
+                  key={i}
+                  tag={tag}
+                  innerHtml={el.innerHTML}
+                  textContent={el.textContent}
+                  {...sharedProps}
+                />
+              );
+            }
+            return (
+              <div key={i} dangerouslySetInnerHTML={{ __html: el.outerHTML }} />
+            );
+          });
+        };
+
         if (authLoading) {
           return <div className="loading">Loading...</div>;
         }
@@ -3744,7 +3916,7 @@
                     const canSeeLaborFlags = ['admin', 'family', 'friend'].includes(userRole);
                     if (!canSeeLaborFlags) {
                       return (
-                        <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(filteredPlanContent) }} />
+                        <div className="plan-content">{renderPlanWithConcerns(filteredPlanContent)}</div>
                       );
                     }
                     const laborFlagsRegex = /(\n## 🚩 Labor Flags[\s\S]*?)(?=\n## |\n# |$)/;
@@ -3773,7 +3945,7 @@
                       return (
                         <>
                           {renderFlags()}
-                          <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(filteredPlanContent) }} />
+                          <div className="plan-content">{renderPlanWithConcerns(filteredPlanContent)}</div>
                         </>
                       );
                     }
@@ -3781,9 +3953,9 @@
                     const after = filteredPlanContent.slice(match.index + match[0].length);
                     return (
                       <>
-                        <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(before) }} />
+                        <div className="plan-content">{renderPlanWithConcerns(before)}</div>
                         {renderFlags()}
-                        <div className="plan-content" dangerouslySetInnerHTML={{ __html: window.marked.parse(after) }} />
+                        <div className="plan-content">{renderPlanWithConcerns(after)}</div>
                       </>
                     );
                   })()}
