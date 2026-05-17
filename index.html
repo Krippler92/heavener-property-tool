@@ -305,6 +305,21 @@
       border-bottom: 1px solid #2a2a2a;
       margin-bottom: 14px;
       letter-spacing: 0.5px;
+      position: relative;
+    }
+    .admin-mode-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #d4a04a;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .sidebar-divider {
+      height: 1px;
+      background: #333;
+      margin: 8px 16px;
     }
     .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; flex: 1; }
     .sidebar-item {
@@ -807,6 +822,55 @@
     .pitch-form-cancel:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    /* ─── Admin section ─── */
+    .admin-section {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      color: #ddd;
+    }
+    .admin-section-header {
+      padding-bottom: 16px;
+      margin-bottom: 32px;
+      border-bottom: 2px solid #d4a04a;
+    }
+    .admin-section-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .admin-section-subtitle {
+      font-size: 16px;
+      color: #aaa;
+      line-height: 1.5;
+    }
+    .admin-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .admin-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 24px;
+      transition: border-color 0.15s;
+      cursor: default;
+    }
+    .admin-card:hover { border-color: #d4a04a; }
+    .admin-card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .admin-card-desc {
+      font-size: 14px;
+      color: #aaa;
+      line-height: 1.5;
     }
 
     /* ─── Plan Request Wizard ─── */
@@ -3854,6 +3918,8 @@
         user,
         isAdmin,
         userRole,
+        adminMode,
+        onLogoClick,
         onSignOut,
         notesUnreadCount,
         flagsUnreadCount,
@@ -3863,9 +3929,13 @@
         const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
         const canSeeGetAPlan = ['admin', 'family'].includes(userRole);
         const canSeePitch = ['admin', 'family', 'friend'].includes(userRole);
+        const canSeeAdmin = isAdmin && adminMode;
         return (
           <div className="sidebar">
-            <div className="sidebar-brand">HEAVENER</div>
+            <div className="sidebar-brand" onClick={onLogoClick}>
+              HEAVENER
+              {canSeeAdmin && <span className="admin-mode-dot" />}
+            </div>
             <div className="sidebar-nav">
               {canSeeMap && (
                 <button
@@ -3918,6 +3988,18 @@
                   <span className="sidebar-item-icon-mobile">💡</span>
                   <span>Pitch an Idea</span>
                 </button>
+              )}
+              {canSeeAdmin && (
+                <>
+                  <div className="sidebar-divider" />
+                  <button
+                    className={`sidebar-item${activeSection === 'admin' ? ' active' : ''}`}
+                    onClick={() => onSectionChange('admin')}
+                  >
+                    <span className="sidebar-item-icon-mobile">🔧</span>
+                    <span>Admin</span>
+                  </button>
+                </>
               )}
             </div>
             <div className="sidebar-user">
@@ -4572,6 +4654,34 @@
         );
       }
 
+      // ─── Admin section (placeholder — real content ships in Round 5D+) ───
+      function AdminSection({ userRole, userUid, userEmail }) {
+        return (
+          <div className="admin-section">
+            <div className="admin-section-header">
+              <div className="admin-section-title">🔧 Admin Dashboard</div>
+              <div className="admin-section-subtitle">
+                Centralized admin controls. All admin work lives here.
+              </div>
+            </div>
+            <div className="admin-card-grid">
+              <div className="admin-card">
+                <div className="admin-card-title">Manage Admins</div>
+                <div className="admin-card-desc">Grant or revoke admin access. Ships in Round 5D.</div>
+              </div>
+              <div className="admin-card">
+                <div className="admin-card-title">Pitches</div>
+                <div className="admin-card-desc">Review and respond to user pitches. Migration from inline. Ships in Round 4C after this round.</div>
+              </div>
+              <div className="admin-card">
+                <div className="admin-card-title">Plan Requests</div>
+                <div className="admin-card-desc">Review plan requests. Migration from Get a Plan tab. Future round.</div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       // ─── Auth wrapper ───
       function AppShell() {
         const [user, setUser] = useState(null);
@@ -4579,6 +4689,10 @@
         const [authError, setAuthError] = useState(null);
         const [isAllowed, setIsAllowed] = useState(null);
         const [userRole, setUserRole] = useState(null);
+        const [adminMode, setAdminMode] = useState(
+          () => sessionStorage.getItem('heavener_admin_mode') === '1'
+        );
+        const adminClickRef = useRef({ count: 0, firstClickTime: 0 });
         const [activeSection, setActiveSection] = useState('map');
         const [planContent, setPlanContent] = useState(null);
         const [planLoading, setPlanLoading] = useState(false);
@@ -4644,6 +4758,26 @@
         }, [user]);
 
         useEffect(() => {
+          sessionStorage.setItem('heavener_admin_mode', adminMode ? '1' : '0');
+        }, [adminMode]);
+
+        const handleLogoClick = () => {
+          if (userRole !== 'admin') return;
+          const now = Date.now();
+          const ref = adminClickRef.current;
+          if (ref.count === 0 || now - ref.firstClickTime > 3000) {
+            ref.firstClickTime = now;
+            ref.count = 1;
+          } else {
+            ref.count += 1;
+          }
+          if (ref.count >= 5) {
+            setAdminMode(prev => !prev);
+            adminClickRef.current = { count: 0, firstClickTime: 0 };
+          }
+        };
+
+        useEffect(() => {
           if (!userRole) return;
           const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
           const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
@@ -4661,7 +4795,10 @@
           if (activeSection === 'pitch' && !canSeePitch) {
             setActiveSection('plan');
           }
-        }, [userRole, activeSection]);
+          if (activeSection === 'admin' && (userRole !== 'admin' || !adminMode)) {
+            setActiveSection('plan');
+          }
+        }, [userRole, activeSection, adminMode]);
 
         useEffect(() => {
           if (activeSection !== 'plan') return;
@@ -5097,6 +5234,8 @@
               user={user}
               isAdmin={isAdmin}
               userRole={userRole}
+              adminMode={adminMode}
+              onLogoClick={handleLogoClick}
               onSignOut={handleSignOut}
               notesUnreadCount={notesUnreadCount}
               flagsUnreadCount={flagsUnreadCount}
@@ -5171,6 +5310,13 @@
                   userEmail={user.email}
                   pitches={pitches}
                   loading={pitchesLoading}
+                />
+              )}
+              {activeSection === 'admin' && userRole === 'admin' && adminMode && (
+                <AdminSection
+                  userRole={userRole}
+                  userUid={user.uid}
+                  userEmail={user.email}
                 />
               )}
               {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
