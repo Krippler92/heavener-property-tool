@@ -5371,7 +5371,7 @@
       }
 
       // ─── Admin section ───
-      function AdminSection({ userRole, userUid, userEmail, pitches, pitchesLoading }) {
+      function AdminSection({ userRole, userUid, userEmail, user, pitches, pitchesLoading, planRequests }) {
         const [subView, setSubView] = useState('dashboard');
         const [allowedUsers, setAllowedUsers] = useState([]);
         const [allowedUsersLoading, setAllowedUsersLoading] = useState(true);
@@ -5391,6 +5391,16 @@
               pitches={pitches}
               loading={pitchesLoading}
               currentAdminEmail={userEmail}
+              onBack={() => setSubView('dashboard')}
+            />
+          );
+        }
+
+        if (subView === 'plan-requests-admin') {
+          return (
+            <AdminPlanRequestsView
+              planRequests={planRequests}
+              user={user}
               onBack={() => setSubView('dashboard')}
             />
           );
@@ -5430,9 +5440,12 @@
                 <div className="admin-card-title">Pitches</div>
                 <div className="admin-card-desc">Review and respond to user pitches.</div>
               </div>
-              <div className="admin-card">
+              <div
+                className="admin-card admin-card-clickable"
+                onClick={() => setSubView('plan-requests-admin')}
+              >
                 <div className="admin-card-title">Plan Requests</div>
-                <div className="admin-card-desc">Review plan requests. Migration from Get a Plan tab. Future round.</div>
+                <div className="admin-card-desc">Review custom plan requests from family.</div>
               </div>
             </div>
           </div>
@@ -5937,6 +5950,69 @@
                   </div>
                 );
               })
+            )}
+          </div>
+        );
+      }
+
+      // ─── Plan Requests admin view ───
+      function AdminPlanRequestsView({ planRequests, user, onBack }) {
+        const [expandedRequestId, setExpandedRequestId] = useState(null);
+        const [adminNotesDrafts, setAdminNotesDrafts] = useState({});
+
+        const sortedRequests = [...planRequests].sort(
+          (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')
+        );
+
+        const handleUpdateStatus = async (requestId, newStatus) => {
+          await window.firebaseUpdatePlanRequest(requestId, {
+            status: newStatus,
+            statusUpdatedAt: window.firebaseServerTimestamp(),
+          });
+        };
+
+        const handleUpdateAdminNotes = async (requestId, notes) => {
+          await window.firebaseUpdatePlanRequest(requestId, {
+            adminNotes: notes,
+            adminNotesUpdatedAt: window.firebaseServerTimestamp(),
+          });
+        };
+
+        const handleDelete = async (requestId) => {
+          if (!confirm('Delete this request?')) return;
+          await window.firebaseDeletePlanRequest(requestId);
+        };
+
+        return (
+          <div className="pitch-admin-view">
+            <div className="pitch-admin-header">
+              <button className="pitch-admin-back-btn" onClick={onBack}>
+                ← Back to Dashboard
+              </button>
+              <h2 className="pitch-admin-title">Plan Requests ({planRequests.length})</h2>
+            </div>
+            {planRequests.length === 0 ? (
+              <div className="pitch-admin-empty">No plan requests submitted yet.</div>
+            ) : (
+              sortedRequests.map(req => (
+                <RequestCard
+                  key={req.id}
+                  request={req}
+                  isAdmin={true}
+                  user={user}
+                  expanded={expandedRequestId === req.id}
+                  onToggleExpand={() =>
+                    setExpandedRequestId(expandedRequestId === req.id ? null : req.id)
+                  }
+                  onUpdateStatus={handleUpdateStatus}
+                  onUpdateAdminNotes={handleUpdateAdminNotes}
+                  onDelete={handleDelete}
+                  adminNotesDraft={adminNotesDrafts[req.id]}
+                  setAdminNotesDraft={(text) =>
+                    setAdminNotesDrafts(d => ({ ...d, [req.id]: text }))
+                  }
+                />
+              ))
             )}
           </div>
         );
@@ -6577,8 +6653,10 @@
                   userRole={userRole}
                   userUid={user.uid}
                   userEmail={user.email}
+                  user={user}
                   pitches={pitches}
                   pitchesLoading={pitchesLoading}
+                  planRequests={planRequests}
                 />
               )}
               {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
