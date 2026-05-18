@@ -323,6 +323,13 @@
       background: #333;
       margin: 8px 16px;
     }
+    .sidebar-section-header {
+      padding: 10px 12px 4px;
+      font-size: 11px;
+      color: #888;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
     .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; flex: 1; }
     .sidebar-item {
       display: flex; align-items: center; gap: 10px;
@@ -448,6 +455,7 @@
       }
       .sidebar-user-name, .sidebar-user-admin { display: none; }
       .sidebar-user-signout { padding: 4px 8px; font-size: 11px; }
+      .sidebar-projects-section { display: none; }
       .main-content.section-plan {
         margin-left: 0;
         margin-bottom: 60px;
@@ -4611,7 +4619,11 @@
         onSignOut,
         notesUnreadCount,
         flagsUnreadCount,
-        planConcernsBadge
+        planConcernsBadge,
+        sortedPlans,
+        plansLoading,
+        activeProjectId,
+        onProjectChange
       }) {
         const canSeeMap = ['admin', 'family', 'friend'].includes(userRole);
         const canSeeNotes = ['admin', 'family', 'friend'].includes(userRole);
@@ -4677,6 +4689,30 @@
                   <span>Pitch an Idea</span>
                 </button>
               )}
+              <div className="sidebar-projects-section">
+                <div className="sidebar-divider" />
+                <div className="sidebar-section-header">Projects</div>
+                {plansLoading && sortedPlans.length === 0 ? (
+                  <div className="sidebar-item" style={{ color: '#666', cursor: 'default' }}>
+                    <span>Loading projects…</span>
+                  </div>
+                ) : (
+                  sortedPlans.map(plan => {
+                    const label = plan.id === 'heavener-main'
+                      ? 'Heavener'
+                      : (plan.title || plan.id);
+                    return (
+                      <button
+                        key={plan.id}
+                        className={`sidebar-item${activeProjectId === plan.id ? ' active' : ''}`}
+                        onClick={() => onProjectChange(plan.id)}
+                      >
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
               {canSeeAdmin && (
                 <>
                   <div className="sidebar-divider" />
@@ -6108,6 +6144,9 @@
         const [planRequests, setPlanRequests] = useState([]);
         const [plans, setPlans] = useState([]);
         const [plansLoading, setPlansLoading] = useState(true);
+        const [activeProjectId, setActiveProjectId] = useState(
+          () => sessionStorage.getItem('activeProjectId') || 'heavener-main'
+        );
         const [expandedRequestId, setExpandedRequestId] = useState(null);
         const [pitches, setPitches] = useState([]);
         const [pitchesLoading, setPitchesLoading] = useState(true);
@@ -6136,6 +6175,25 @@
         useEffect(() => {
           sessionStorage.setItem('heavener_admin_mode', adminMode ? '1' : '0');
         }, [adminMode]);
+
+        useEffect(() => {
+          sessionStorage.setItem('activeProjectId', activeProjectId);
+        }, [activeProjectId]);
+
+        const sortedPlans = useMemo(() => {
+          const arr = [...plans];
+          arr.sort((a, b) => {
+            if (a.id === 'heavener-main') return -1;
+            if (b.id === 'heavener-main') return 1;
+            const aCreated = a.createdAt || '';
+            const bCreated = b.createdAt || '';
+            if (!aCreated && !bCreated) return 0;
+            if (!aCreated) return 1;
+            if (!bCreated) return -1;
+            return bCreated.localeCompare(aCreated);
+          });
+          return arr;
+        }, [plans]);
 
         const handleLogoClick = () => {
           if (userRole !== 'admin') return;
@@ -6604,6 +6662,10 @@
               notesUnreadCount={notesUnreadCount}
               flagsUnreadCount={flagsUnreadCount}
               planConcernsBadge={unresolvedConcernsCount}
+              sortedPlans={sortedPlans}
+              plansLoading={plansLoading}
+              activeProjectId={activeProjectId}
+              onProjectChange={setActiveProjectId}
             />
             <div className={`main-content section-${activeSection}`}>
               {activeSection === 'map' && ['admin', 'family', 'friend'].includes(userRole) && (
