@@ -973,7 +973,30 @@
       background: #d4a04a;
       color: #1a1a1a;
     }
-    .manage-admins-action-grant:hover { background: #e0ad55; }
+    .manage-admins-action-grant:hover:not(:disabled) { background: #e0ad55; }
+    .manage-admins-action-revoke {
+      background: transparent;
+      color: #e88;
+      border: 1px solid #553;
+    }
+    .manage-admins-action-revoke:hover:not(:disabled) { background: #2a1515; }
+    .manage-admins-action:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .manage-admins-action-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .manage-admins-action-help {
+      font-size: 11px;
+      color: #888;
+      font-style: italic;
+      max-width: 220px;
+      text-align: right;
+    }
     .manage-admins-confirm {
       padding: 16px;
       background: #1a1a1a;
@@ -1010,6 +1033,21 @@
       box-sizing: border-box;
     }
     .manage-admins-confirm-input:focus {
+      outline: none;
+      border-color: #d4a04a;
+    }
+    .manage-admins-confirm-select {
+      width: 100%;
+      padding: 8px 10px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .manage-admins-confirm-select:focus {
       outline: none;
       border-color: #d4a04a;
     }
@@ -4945,16 +4983,86 @@
             setConfirmError("Email doesn't match. Type the exact address shown above.");
             return;
           }
+          if (
+            confirmAction.type === 'revoke' &&
+            confirmAction.email === currentAdminEmail &&
+            admins.length === 1
+          ) {
+            setConfirmError('Cannot revoke the only admin. Grant admin to another user first.');
+            return;
+          }
+          const newRole = confirmAction.type === 'grant' ? 'admin' : confirmAction.newRole;
           setConfirming(true);
           setConfirmError(null);
           try {
-            await window.firebaseUpdateUserRole(confirmAction.email, 'admin', currentAdminEmail);
+            await window.firebaseUpdateUserRole(confirmAction.email, newRole, currentAdminEmail);
             setConfirmAction(null);
             setConfirming(false);
           } catch (err) {
             setConfirmError(err.message || 'Failed to update role. Try again.');
             setConfirming(false);
           }
+        };
+
+        const renderConfirmPanel = (targetEmail) => {
+          const matches =
+            confirmInput.trim().toLowerCase() === confirmAction.email.toLowerCase();
+          const heading = confirmAction.type === 'grant'
+            ? `Grant admin access to ${confirmAction.email}?`
+            : `Revoke admin access from ${confirmAction.email}?`;
+          return (
+            <div key={targetEmail} className="manage-admins-confirm">
+              <div className="manage-admins-confirm-heading">{heading}</div>
+              {confirmAction.type === 'revoke' && (
+                <div className="manage-admins-confirm-field">
+                  <label className="manage-admins-confirm-label">Demote to role:</label>
+                  <select
+                    className="manage-admins-confirm-select"
+                    value={confirmAction.newRole}
+                    onChange={(e) =>
+                      setConfirmAction({ ...confirmAction, newRole: e.target.value })
+                    }
+                  >
+                    <option value="family">Family</option>
+                    <option value="friend">Friend</option>
+                    <option value="investor">Investor</option>
+                  </select>
+                </div>
+              )}
+              <div className="manage-admins-confirm-field">
+                <label className="manage-admins-confirm-label">
+                  Type the email address to confirm:
+                </label>
+                <input
+                  type="text"
+                  className="manage-admins-confirm-input"
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  placeholder={confirmAction.email}
+                  autoFocus
+                />
+              </div>
+              {confirmError && (
+                <div className="manage-admins-confirm-error">{confirmError}</div>
+              )}
+              <div className="manage-admins-confirm-actions">
+                <button
+                  className="manage-admins-confirm-btn-cancel"
+                  onClick={() => setConfirmAction(null)}
+                  disabled={confirming}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="manage-admins-confirm-btn-confirm"
+                  onClick={handleConfirm}
+                  disabled={confirming || !matches}
+                >
+                  {confirming ? 'Updating…' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          );
         };
 
         const formatAddedAt = (iso) => {
@@ -4986,17 +5094,46 @@
                     </div>
                   ) : (
                     admins.map(u => {
+                      const inConfirm =
+                        confirmAction &&
+                        confirmAction.type === 'revoke' &&
+                        confirmAction.email === u.email;
+                      if (inConfirm) return renderConfirmPanel(u.id);
                       const added = formatAddedAt(u.addedAt);
+                      const isSelf = u.email === currentAdminEmail;
+                      const isOnlyAdmin = isSelf && admins.length === 1;
                       return (
                         <div key={u.id} className="manage-admins-user-row">
                           <div className="manage-admins-user-info">
                             <div className="manage-admins-user-email">
-                              {u.email}{u.email === currentAdminEmail ? ' (you)' : ''}
+                              {u.email}{isSelf ? ' (you)' : ''}
                             </div>
                             {added && (
                               <div className="manage-admins-user-meta">added {added}</div>
                             )}
                           </div>
+                          {isOnlyAdmin ? (
+                            <div className="manage-admins-action-wrapper">
+                              <button
+                                className="manage-admins-action manage-admins-action-revoke"
+                                disabled
+                              >
+                                Revoke admin
+                              </button>
+                              <div className="manage-admins-action-help">
+                                You're the only admin. Grant admin to another user first to revoke yourself.
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              className="manage-admins-action manage-admins-action-revoke"
+                              onClick={() =>
+                                setConfirmAction({ type: 'revoke', email: u.email, newRole: 'family' })
+                              }
+                            >
+                              Revoke admin
+                            </button>
+                          )}
                         </div>
                       );
                     })
@@ -5016,49 +5153,7 @@
                         confirmAction &&
                         confirmAction.type === 'grant' &&
                         confirmAction.email === u.email;
-                      if (inConfirm) {
-                        const matches =
-                          confirmInput.trim().toLowerCase() === confirmAction.email.toLowerCase();
-                        return (
-                          <div key={u.id} className="manage-admins-confirm">
-                            <div className="manage-admins-confirm-heading">
-                              Grant admin access to {confirmAction.email}?
-                            </div>
-                            <div className="manage-admins-confirm-field">
-                              <label className="manage-admins-confirm-label">
-                                Type the email address to confirm:
-                              </label>
-                              <input
-                                type="text"
-                                className="manage-admins-confirm-input"
-                                value={confirmInput}
-                                onChange={(e) => setConfirmInput(e.target.value)}
-                                placeholder={confirmAction.email}
-                                autoFocus
-                              />
-                            </div>
-                            {confirmError && (
-                              <div className="manage-admins-confirm-error">{confirmError}</div>
-                            )}
-                            <div className="manage-admins-confirm-actions">
-                              <button
-                                className="manage-admins-confirm-btn-cancel"
-                                onClick={() => setConfirmAction(null)}
-                                disabled={confirming}
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                className="manage-admins-confirm-btn-confirm"
-                                onClick={handleConfirm}
-                                disabled={confirming || !matches}
-                              >
-                                {confirming ? 'Updating…' : 'Confirm'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      }
+                      if (inConfirm) return renderConfirmPanel(u.id);
                       return (
                         <div key={u.id} className="manage-admins-user-row">
                           <div className="manage-admins-user-info">
