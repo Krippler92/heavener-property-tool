@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAllowed() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email));
+    }
+    function isAdmin() {
+      return isAllowed() && getRole() == 'admin';
+    }
+    function getRole() {
+      return get(/databases/$(database)/documents/allowed_users/$(request.auth.token.email)).data.role;
+    }
+    function canPostContent() {
+      return isAllowed() && (isAdmin()
+        || getRole() == "family"
+        || getRole() == "friend");
+    }
+    function canPostConcerns() {
+      return isAllowed() && (isAdmin()
+        || getRole() == "family"
+        || getRole() == "friend"
+        || getRole() == "investor");
+    }
+    function canPostPlanRequest() {
+      return isAllowed() && (isAdmin() || getRole() == "family");
+    }
+    match /flags/{flagId} {
+      allow read: if isAllowed();
+      allow create: if canPostContent()
+        && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+    match /family_notes/{noteId} {
+      allow read: if isAllowed();
+      allow create: if canPostContent()
+        && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+      allow delete: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+    }
+    match /labor_flag_notes/{noteId} {
+      allow read: if isAllowed();
+      allow create: if canPostContent()
+        && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+      allow delete: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+    }
+    match /plan_concerns/{concernId} {
+      allow read: if isAllowed();
+      allow create: if canPostConcerns()
+        && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+      allow delete: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+    }
+    match /plan_requests/{requestId} {
+      allow read: if isAdmin()
+        || (isAllowed() && resource.data.authorUid == request.auth.uid);
+      allow create: if canPostPlanRequest()
+        && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin()
+        || (request.auth != null
+            && resource.data.authorUid == request.auth.uid);
+    }
+    match /idea_pitches/{pitchId} {
+    allow read: if isAllowed() && (isAdmin() || resource.data.authorUid == request.auth.uid);
+    allow create: if canPostContent()
+    && request.resource.data.authorUid == request.auth.uid&& request.resource.data.authorEmail == request.auth.token.email&& request.resource.data.status == 'new'
+    && request.resource.data.title is string
+    && request.resource.data.title.size() > 0
+    && request.resource.data.title.size() <= 100
+    && request.resource.data.category in ['business','farm','technical','energy','livestock','property','marketing','other']
+    && request.resource.data.description is string
+    && request.resource.data.description.size() > 0
+    && request.resource.data.description.size() <= 2000;
+    allow update: if isAdmin();
+    allow delete: if isAdmin()
+    || (resource.data.authorUid == request.auth.uid && resource.data.status == 'new');
+    }
+    match /allowed_users/{email} {
+      allow read: if request.auth != null
+        && request.auth.token.email == email;
+      allow read, write: if isAdmin();
+    }
+    match /plans/{planId} { allow read: if isAdmin() || (isAllowed() && resource.data.visibility == 'public') || (isAllowed() && resource.data.ownerUid == request.auth.uid) || (isAllowed() && request.auth.uid in resource.data.invitedUids); allow create: if canPostContent() && request.resource.data.ownerUid == request.auth.uid; allow update: if isAdmin() || resource.data.ownerUid == request.auth.uid; allow delete: if false; }
+  }
+}
