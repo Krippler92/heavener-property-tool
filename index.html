@@ -1916,7 +1916,7 @@
           and(
             where("archived", "==", false),
             or(
-              where("owner", "==", currentUser.uid),
+              where("ownerUid", "==", currentUser.uid),
               where("visibility", "==", "public")
             )
           )
