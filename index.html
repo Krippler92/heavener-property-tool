@@ -1752,7 +1752,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, deleteDoc, doc, getDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc, updateDoc, where } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, getDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc, updateDoc, where, and, or } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
     // ─── FIREBASE CONFIG (replace these placeholders with your Firebase project keys) ───
     const firebaseConfig = {
@@ -1900,6 +1900,45 @@
         }));
         cb(requests);
       });
+    };
+
+    window.firebasePlansSubscribe = (currentUser, role, setPlans, setPlansLoading) => {
+      if (!currentUser) return () => {};
+      let q;
+      if (role === 'admin') {
+        q = query(
+          collection(db, "plans"),
+          where("archived", "==", false)
+        );
+      } else {
+        q = query(
+          collection(db, "plans"),
+          and(
+            where("archived", "==", false),
+            or(
+              where("owner", "==", currentUser.uid),
+              where("visibility", "==", "public")
+            )
+          )
+        );
+      }
+      return onSnapshot(
+        q,
+        (snapshot) => {
+          const plans = snapshot.docs.map(d => ({
+            ...d.data(),
+            id: d.id,
+            createdAt: d.data().createdAt?.toDate?.()?.toISOString()
+              || new Date().toISOString(),
+          }));
+          setPlans(plans);
+          setPlansLoading(false);
+        },
+        (err) => {
+          console.error("firebasePlansSubscribe snapshot error:", err);
+          setPlansLoading(false);
+        }
+      );
     };
 
     window.firebaseIdeaPitchesSubscribe = (cb, ownUid) => {
@@ -6067,6 +6106,8 @@
         const [wizardSubmitting, setWizardSubmitting] = useState(false);
         const [wizardSubmitted, setWizardSubmitted] = useState(false);
         const [planRequests, setPlanRequests] = useState([]);
+        const [plans, setPlans] = useState([]);
+        const [plansLoading, setPlansLoading] = useState(true);
         const [expandedRequestId, setExpandedRequestId] = useState(null);
         const [pitches, setPitches] = useState([]);
         const [pitchesLoading, setPitchesLoading] = useState(true);
@@ -6191,6 +6232,12 @@
           const unsub = window.firebasePlanRequestsSubscribe((requests) => {
             setPlanRequests(requests);
           }, ownUid);
+          return () => unsub();
+        }, [user, isAllowed, userRole]);
+
+        useEffect(() => {
+          if (!user || !isAllowed || !userRole) return;
+          const unsub = window.firebasePlansSubscribe(user, userRole, setPlans, setPlansLoading);
           return () => unsub();
         }, [user, isAllowed, userRole]);
 
