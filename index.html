@@ -726,6 +726,86 @@
       color: #888;
       padding: 40px;
     }
+    .pitch-user-list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #333;
+    }
+    .pitch-user-list-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+    }
+    .pitch-user-list-new-btn {
+      padding: 8px 18px;
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .pitch-user-list-new-btn:hover { background: #e0ad55; }
+    .pitch-user-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+    .pitch-user-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pitch-user-card-date {
+      font-size: 12px;
+      color: #888;
+      margin-left: auto;
+    }
+    .pitch-user-card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+    .pitch-user-card-description {
+      font-size: 14px;
+      color: #ddd;
+      line-height: 1.6;
+      margin-bottom: 12px;
+      white-space: pre-wrap;
+    }
+    .pitch-user-card-admin-reply {
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: #2a1f0a;
+      border-left: 3px solid #d4a04a;
+      border-radius: 4px;
+    }
+    .pitch-user-card-admin-reply-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #d4a04a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .pitch-user-card-admin-reply-text {
+      font-size: 14px;
+      color: #ddd;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
     .pitch-form {
       max-width: 600px;
       margin: 0 auto;
@@ -5176,8 +5256,39 @@
       }
 
       // ─── Pitch an Idea section ───
+      // ─── Pitch shared constants (used by PitchSection + PitchAdminView) ───
+      const PITCH_STATUS_ORDER = ['new', 'reviewing', 'accepted', 'rejected', 'implemented'];
+      const PITCH_STATUS_LABEL = {
+        new: 'New',
+        reviewing: 'Reviewing',
+        accepted: 'Accepted',
+        rejected: 'Rejected',
+        implemented: 'Implemented',
+      };
+      const PITCH_CATEGORY_LABEL = {
+        business: '💼 Business',
+        farm: '🌾 Farm Operations',
+        technical: '🔧 Technical / DIY',
+        energy: '⚡ Energy Systems',
+        livestock: '🐔 Livestock',
+        property: '🏠 Property / Building',
+        marketing: '📣 Marketing / Growth',
+        other: '💡 Other',
+      };
+      const formatPitchDate = (iso) => {
+        if (!iso) return null;
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return null;
+        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      };
+
       function PitchSection({ userRole, userUid, userEmail, pitches, loading }) {
         const [mode, setMode] = useState('view');
+        const myPitches = pitches.filter(p => p.authorUid === userUid);
+        const sortedMyPitches = [...myPitches].sort(
+          (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')
+        );
+
         if (mode === 'form') {
           return (
             <div className="pitch-section">
@@ -5198,12 +5309,48 @@
             </div>
           );
         }
-        if (pitches.length > 0) {
+        if (myPitches.length > 0) {
           return (
             <div className="pitch-section">
-              <div className="pitch-list-placeholder">
-                {pitches.length} pitches loaded — list rendering ships in Round 4C
+              <div className="pitch-user-list-header">
+                <h2 className="pitch-user-list-title">
+                  Your Pitches ({myPitches.length})
+                </h2>
+                <button
+                  className="pitch-user-list-new-btn"
+                  onClick={() => setMode('form')}
+                >
+                  + Pitch a New Idea
+                </button>
               </div>
+              {sortedMyPitches.map(pitch => {
+                const dateLabel = formatPitchDate(pitch.createdAt);
+                const categoryLabel =
+                  PITCH_CATEGORY_LABEL[pitch.category] || pitch.category || 'Uncategorized';
+                const pitchStatus = pitch.status || 'new';
+                const adminReply = (pitch.adminReply || '').trim();
+                return (
+                  <div key={pitch.id} className="pitch-user-card">
+                    <div className="pitch-user-card-meta">
+                      <span className={`pitch-status-badge pitch-status-${pitchStatus}`}>
+                        {PITCH_STATUS_LABEL[pitchStatus] || pitchStatus}
+                      </span>
+                      <span className="pitch-category-badge">{categoryLabel}</span>
+                      {dateLabel && (
+                        <span className="pitch-user-card-date">{dateLabel}</span>
+                      )}
+                    </div>
+                    <div className="pitch-user-card-title">{pitch.title}</div>
+                    <div className="pitch-user-card-description">{pitch.description}</div>
+                    {adminReply && (
+                      <div className="pitch-user-card-admin-reply">
+                        <div className="pitch-user-card-admin-reply-label">Admin reply:</div>
+                        <div className="pitch-user-card-admin-reply-text">{adminReply}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         }
@@ -5514,31 +5661,10 @@
 
       // ─── Pitch admin view ───
       function PitchAdminView({ pitches, loading, currentAdminEmail, onBack }) {
-        const STATUS_ORDER = ['new', 'reviewing', 'accepted', 'rejected', 'implemented'];
-        const STATUS_LABEL = {
-          new: 'New',
-          reviewing: 'Reviewing',
-          accepted: 'Accepted',
-          rejected: 'Rejected',
-          implemented: 'Implemented',
-        };
-        const CATEGORY_LABEL = {
-          business: '💼 Business',
-          farm: '🌾 Farm Operations',
-          technical: '🔧 Technical / DIY',
-          energy: '⚡ Energy Systems',
-          livestock: '🐔 Livestock',
-          property: '🏠 Property / Building',
-          marketing: '📣 Marketing / Growth',
-          other: '💡 Other',
-        };
-
-        const formatDate = (iso) => {
-          if (!iso) return null;
-          const d = new Date(iso);
-          if (isNaN(d.getTime())) return null;
-          return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-        };
+        const STATUS_ORDER = PITCH_STATUS_ORDER;
+        const STATUS_LABEL = PITCH_STATUS_LABEL;
+        const CATEGORY_LABEL = PITCH_CATEGORY_LABEL;
+        const formatDate = formatPitchDate;
 
         const [expandedPitchId, setExpandedPitchId] = useState(null);
         const [statusDrafts, setStatusDrafts] = useState({});
