@@ -67,3 +67,8 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Migration scripts
+scripts/node_modules/
+scripts/service-account*.json
+service-account*.json

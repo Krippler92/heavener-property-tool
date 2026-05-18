@@ -1,0 +1,13 @@
+{
+  "name": "heavener-migrations",
+  "private": true,
+  "version": "0.1.0",
+  "description": "One-shot migration scripts for Heavener Property Tool Firestore",
+  "scripts": {
+    "migrate:dry": "node migrate-add-plan-id.js",
+    "migrate": "node migrate-add-plan-id.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
