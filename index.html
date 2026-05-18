@@ -6068,7 +6068,6 @@
         const [wizardSubmitted, setWizardSubmitted] = useState(false);
         const [planRequests, setPlanRequests] = useState([]);
         const [expandedRequestId, setExpandedRequestId] = useState(null);
-        const [adminNotesDrafts, setAdminNotesDrafts] = useState({});
         const [pitches, setPitches] = useState([]);
         const [pitchesLoading, setPitchesLoading] = useState(true);
 
@@ -6427,26 +6426,7 @@
           setWizardSubmitted(false);
         };
 
-        const handleUpdateRequestStatus = async (requestId, newStatus) => {
-          await window.firebaseUpdatePlanRequest(requestId, {
-            status: newStatus,
-            statusUpdatedAt: window.firebaseServerTimestamp(),
-          });
-        };
-
-        const handleUpdateRequestAdminNotes = async (requestId, notes) => {
-          await window.firebaseUpdatePlanRequest(requestId, {
-            adminNotes: notes,
-            statusUpdatedAt: window.firebaseServerTimestamp(),
-          });
-          setAdminNotesDrafts(d => {
-            const next = { ...d };
-            delete next[requestId];
-            return next;
-          });
-        };
-
-        const handleDeleteRequest = async (requestId) => {
+        const handleDeleteOwnRequest = async (requestId) => {
           if (!confirm("Delete this request?")) return;
           await window.firebaseDeletePlanRequest(requestId);
         };
@@ -6691,15 +6671,11 @@
                         <RequestCard
                           key={req.id}
                           request={req}
-                          isAdmin={isAdmin}
+                          isAdmin={false}
                           user={user}
                           expanded={expandedRequestId === req.id}
                           onToggleExpand={() => setExpandedRequestId(expandedRequestId === req.id ? null : req.id)}
-                          onUpdateStatus={handleUpdateRequestStatus}
-                          onUpdateAdminNotes={handleUpdateRequestAdminNotes}
-                          onDelete={handleDeleteRequest}
-                          adminNotesDraft={adminNotesDrafts[req.id]}
-                          setAdminNotesDraft={(text) => setAdminNotesDrafts(d => ({...d, [req.id]: text}))}
+                          onDelete={handleDeleteOwnRequest}
                         />
                       ))}
                     </>
