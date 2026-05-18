@@ -1205,6 +1205,87 @@
       font-size: 11px;
       font-weight: 500;
     }
+    .pitch-admin-manage-btn {
+      margin-top: 12px;
+      padding: 6px 14px;
+      background: transparent;
+      color: #d4a04a;
+      border: 1px solid #553a13;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .pitch-admin-manage-btn:hover {
+      background: #2a1f0a;
+      color: #e0ad55;
+    }
+    .pitch-admin-expand {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #2a2a2a;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .pitch-admin-expand-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pitch-admin-expand-label {
+      font-size: 12px;
+      color: #aaa;
+      font-weight: 500;
+    }
+    .pitch-admin-expand-select,
+    .pitch-admin-expand-textarea {
+      width: 100%;
+      padding: 8px 10px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .pitch-admin-expand-select:focus,
+    .pitch-admin-expand-textarea:focus {
+      outline: none;
+      border-color: #d4a04a;
+    }
+    .pitch-admin-expand-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    .pitch-admin-expand-error {
+      font-size: 13px;
+      color: #e88;
+      background: #2a1515;
+      border: 1px solid #553;
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .pitch-admin-save-btn {
+      align-self: flex-end;
+      padding: 8px 18px;
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .pitch-admin-save-btn:hover:not(:disabled) { background: #e0ad55; }
+    .pitch-admin-save-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
 
     /* ─── Plan Request Wizard ─── */
     .wizard-container {
@@ -1683,6 +1764,17 @@
           role: newRole,
           roleChangedAt: serverTimestamp(),
           roleChangedBy: changedByEmail,
+        },
+        { merge: true }
+      );
+
+    window.firebaseUpdatePitch = (pitchId, fields, updatedByEmail) =>
+      setDoc(
+        doc(db, "idea_pitches", pitchId),
+        {
+          ...fields,
+          updatedAt: serverTimestamp(),
+          updatedBy: updatedByEmail,
         },
         { merge: true }
       );
@@ -5036,6 +5128,7 @@
             <PitchAdminView
               pitches={pitches}
               loading={pitchesLoading}
+              currentAdminEmail={userEmail}
               onBack={() => setSubView('dashboard')}
             />
           );
@@ -5304,8 +5397,8 @@
         );
       }
 
-      // ─── Pitch admin view (read-only — actions ship in Round 4C-ii) ───
-      function PitchAdminView({ pitches, loading, onBack }) {
+      // ─── Pitch admin view ───
+      function PitchAdminView({ pitches, loading, currentAdminEmail, onBack }) {
         const STATUS_ORDER = ['new', 'reviewing', 'accepted', 'rejected', 'implemented'];
         const STATUS_LABEL = {
           new: 'New',
@@ -5330,6 +5423,73 @@
           const d = new Date(iso);
           if (isNaN(d.getTime())) return null;
           return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        };
+
+        const [expandedPitchId, setExpandedPitchId] = useState(null);
+        const [statusDrafts, setStatusDrafts] = useState({});
+        const [replyDrafts, setReplyDrafts] = useState({});
+        const [cardSaving, setCardSaving] = useState({});
+        const [cardErrors, setCardErrors] = useState({});
+
+        const handleToggleExpand = (pitch) => {
+          if (expandedPitchId === pitch.id) {
+            setExpandedPitchId(null);
+            return;
+          }
+          setStatusDrafts(prev => prev[pitch.id] !== undefined
+            ? prev
+            : { ...prev, [pitch.id]: pitch.status || 'new' });
+          setReplyDrafts(prev => prev[pitch.id] !== undefined
+            ? prev
+            : { ...prev, [pitch.id]: pitch.adminReply || '' });
+          setExpandedPitchId(pitch.id);
+        };
+
+        const handleStatusChange = (pitchId, newStatus) => {
+          setStatusDrafts(prev => ({ ...prev, [pitchId]: newStatus }));
+        };
+
+        const handleReplyChange = (pitchId, newReply) => {
+          setReplyDrafts(prev => ({ ...prev, [pitchId]: newReply }));
+        };
+
+        const handleSave = async (pitch) => {
+          const pitchId = pitch.id;
+          const status = statusDrafts[pitchId] ?? (pitch.status || 'new');
+          const reply = (replyDrafts[pitchId] ?? (pitch.adminReply || '')).trim();
+          if (!STATUS_ORDER.includes(status)) {
+            setCardErrors(prev => ({ ...prev, [pitchId]: 'Invalid status' }));
+            return;
+          }
+          setCardSaving(prev => ({ ...prev, [pitchId]: true }));
+          setCardErrors(prev => {
+            const next = { ...prev };
+            delete next[pitchId];
+            return next;
+          });
+          try {
+            await window.firebaseUpdatePitch(
+              pitchId,
+              { status, adminReply: reply },
+              currentAdminEmail
+            );
+            setCardSaving(prev => {
+              const next = { ...prev };
+              delete next[pitchId];
+              return next;
+            });
+            setExpandedPitchId(null);
+          } catch (err) {
+            setCardErrors(prev => ({
+              ...prev,
+              [pitchId]: err.message || 'Save failed',
+            }));
+            setCardSaving(prev => {
+              const next = { ...prev };
+              delete next[pitchId];
+              return next;
+            });
+          }
         };
 
         const sortedPitches = [...pitches].sort((a, b) => {
@@ -5384,6 +5544,52 @@
                           <div className="pitch-admin-card-author">
                             From {pitch.authorEmail} ({pitch.authorRole || 'no role'})
                           </div>
+                          <button
+                            className="pitch-admin-manage-btn"
+                            onClick={() => handleToggleExpand(pitch)}
+                          >
+                            {expandedPitchId === pitch.id ? 'Cancel' : 'Manage'}
+                          </button>
+                          {expandedPitchId === pitch.id && (
+                            <div className="pitch-admin-expand">
+                              <div className="pitch-admin-expand-field">
+                                <label className="pitch-admin-expand-label">Status</label>
+                                <select
+                                  className="pitch-admin-expand-select"
+                                  value={statusDrafts[pitch.id] ?? (pitch.status || 'new')}
+                                  onChange={(e) => handleStatusChange(pitch.id, e.target.value)}
+                                >
+                                  {STATUS_ORDER.map(s => (
+                                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="pitch-admin-expand-field">
+                                <label className="pitch-admin-expand-label">
+                                  Admin reply (visible to author)
+                                </label>
+                                <textarea
+                                  className="pitch-admin-expand-textarea"
+                                  rows={4}
+                                  value={replyDrafts[pitch.id] ?? (pitch.adminReply || '')}
+                                  onChange={(e) => handleReplyChange(pitch.id, e.target.value)}
+                                  placeholder="Optional reply — explanation, follow-up questions, decisions, etc."
+                                />
+                              </div>
+                              {cardErrors[pitch.id] && (
+                                <div className="pitch-admin-expand-error">
+                                  {cardErrors[pitch.id]}
+                                </div>
+                              )}
+                              <button
+                                className="pitch-admin-save-btn"
+                                onClick={() => handleSave(pitch)}
+                                disabled={!!cardSaving[pitch.id]}
+                              >
+                                {cardSaving[pitch.id] ? 'Saving…' : 'Save changes'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
