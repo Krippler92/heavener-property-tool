@@ -1094,6 +1094,118 @@
     }
     .manage-admins-confirm-btn-cancel:hover { background: #222; }
 
+    /* ─── Pitch admin view ─── */
+    .pitch-admin-view {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      color: #ddd;
+    }
+    .pitch-admin-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #333;
+    }
+    .pitch-admin-back-btn {
+      padding: 6px 12px;
+      background: transparent;
+      color: #aaa;
+      border: 1px solid #333;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .pitch-admin-back-btn:hover {
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #555;
+    }
+    .pitch-admin-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+    }
+    .pitch-admin-loading,
+    .pitch-admin-empty {
+      text-align: center;
+      color: #888;
+      padding: 40px;
+    }
+    .pitch-admin-section { margin-bottom: 32px; }
+    .pitch-admin-section-heading {
+      font-size: 14px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .pitch-admin-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 12px;
+    }
+    .pitch-admin-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pitch-admin-card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 8px;
+      margin-bottom: 8px;
+    }
+    .pitch-admin-card-description {
+      font-size: 14px;
+      color: #ddd;
+      line-height: 1.6;
+      margin-bottom: 12px;
+      white-space: pre-wrap;
+    }
+    .pitch-admin-card-author {
+      font-size: 12px;
+      color: #888;
+      font-style: italic;
+    }
+    .pitch-admin-card-date {
+      font-size: 12px;
+      color: #888;
+      margin-left: auto;
+    }
+    .pitch-status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .pitch-status-new { background: #d4a04a; color: #1a1a1a; }
+    .pitch-status-reviewing { background: #3a4a6e; color: #cde; }
+    .pitch-status-accepted { background: #2d5a2d; color: #cfc; }
+    .pitch-status-rejected { background: #4a2d2d; color: #fcc; }
+    .pitch-status-implemented { background: #2a2a2a; color: #888; }
+    .pitch-category-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      background: #2a2a2a;
+      color: #aaa;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
     /* ─── Plan Request Wizard ─── */
     .wizard-container {
       background: #161616;
@@ -4905,7 +5017,7 @@
       }
 
       // ─── Admin section ───
-      function AdminSection({ userRole, userUid, userEmail }) {
+      function AdminSection({ userRole, userUid, userEmail, pitches, pitchesLoading }) {
         const [subView, setSubView] = useState('dashboard');
         const [allowedUsers, setAllowedUsers] = useState([]);
         const [allowedUsersLoading, setAllowedUsersLoading] = useState(true);
@@ -4918,6 +5030,16 @@
           });
           return () => unsub();
         }, [userRole]);
+
+        if (subView === 'pitches-admin') {
+          return (
+            <PitchAdminView
+              pitches={pitches}
+              loading={pitchesLoading}
+              onBack={() => setSubView('dashboard')}
+            />
+          );
+        }
 
         if (subView === 'manage-admins') {
           return (
@@ -4946,9 +5068,12 @@
                 <div className="admin-card-title">Manage Admins</div>
                 <div className="admin-card-desc">Grant or revoke admin access.</div>
               </div>
-              <div className="admin-card">
+              <div
+                className="admin-card admin-card-clickable"
+                onClick={() => setSubView('pitches-admin')}
+              >
                 <div className="admin-card-title">Pitches</div>
-                <div className="admin-card-desc">Review and respond to user pitches. Migration from inline. Ships in Round 4C after this round.</div>
+                <div className="admin-card-desc">Review and respond to user pitches.</div>
               </div>
               <div className="admin-card">
                 <div className="admin-card-title">Plan Requests</div>
@@ -5174,6 +5299,97 @@
                   )}
                 </div>
               </>
+            )}
+          </div>
+        );
+      }
+
+      // ─── Pitch admin view (read-only — actions ship in Round 4C-ii) ───
+      function PitchAdminView({ pitches, loading, onBack }) {
+        const STATUS_ORDER = ['new', 'reviewing', 'accepted', 'rejected', 'implemented'];
+        const STATUS_LABEL = {
+          new: 'New',
+          reviewing: 'Reviewing',
+          accepted: 'Accepted',
+          rejected: 'Rejected',
+          implemented: 'Implemented',
+        };
+        const CATEGORY_LABEL = {
+          business: '💼 Business',
+          farm: '🌾 Farm Operations',
+          technical: '🔧 Technical / DIY',
+          energy: '⚡ Energy Systems',
+          livestock: '🐔 Livestock',
+          property: '🏠 Property / Building',
+          marketing: '📣 Marketing / Growth',
+          other: '💡 Other',
+        };
+
+        const formatDate = (iso) => {
+          if (!iso) return null;
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return null;
+          return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        };
+
+        const sortedPitches = [...pitches].sort((a, b) => {
+          const at = a.createdAt || '';
+          const bt = b.createdAt || '';
+          return bt.localeCompare(at);
+        });
+
+        const grouped = STATUS_ORDER.reduce((acc, status) => {
+          acc[status] = sortedPitches.filter(p => (p.status || 'new') === status);
+          return acc;
+        }, {});
+
+        return (
+          <div className="pitch-admin-view">
+            <div className="pitch-admin-header">
+              <button className="pitch-admin-back-btn" onClick={onBack}>
+                ← Back to Dashboard
+              </button>
+              <h2 className="pitch-admin-title">Pitches ({pitches.length})</h2>
+            </div>
+            {loading ? (
+              <div className="pitch-admin-loading">Loading pitches…</div>
+            ) : pitches.length === 0 ? (
+              <div className="pitch-admin-empty">No pitches submitted yet.</div>
+            ) : (
+              STATUS_ORDER.map(status => {
+                const group = grouped[status];
+                if (group.length === 0) return null;
+                return (
+                  <div key={status} className="pitch-admin-section">
+                    <div className="pitch-admin-section-heading">
+                      {STATUS_LABEL[status]} ({group.length})
+                    </div>
+                    {group.map(pitch => {
+                      const dateLabel = formatDate(pitch.createdAt);
+                      const categoryLabel = CATEGORY_LABEL[pitch.category] || pitch.category || 'Uncategorized';
+                      const pitchStatus = pitch.status || 'new';
+                      return (
+                        <div key={pitch.id} className="pitch-admin-card">
+                          <div className="pitch-admin-card-meta">
+                            <span className={`pitch-status-badge pitch-status-${pitchStatus}`}>
+                              {STATUS_LABEL[pitchStatus] || pitchStatus}
+                            </span>
+                            <span className="pitch-category-badge">{categoryLabel}</span>
+                            {dateLabel && (
+                              <span className="pitch-admin-card-date">{dateLabel}</span>
+                            )}
+                          </div>
+                          <div className="pitch-admin-card-title">{pitch.title}</div>
+                          <div className="pitch-admin-card-description">{pitch.description}</div>
+                          <div className="pitch-admin-card-author">
+                            From {pitch.authorEmail} ({pitch.authorRole || 'no role'})
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
             )}
           </div>
         );
@@ -5814,6 +6030,8 @@
                   userRole={userRole}
                   userUid={user.uid}
                   userEmail={user.email}
+                  pitches={pitches}
+                  pitchesLoading={pitchesLoading}
                 />
               )}
               {activeSection === 'get-a-plan' && ['admin', 'family'].includes(userRole) && (
