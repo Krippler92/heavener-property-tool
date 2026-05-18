@@ -959,6 +959,102 @@
       font-size: 14px;
       text-align: center;
     }
+    .manage-admins-action {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+      border: none;
+    }
+    .manage-admins-action-grant {
+      background: #d4a04a;
+      color: #1a1a1a;
+    }
+    .manage-admins-action-grant:hover { background: #e0ad55; }
+    .manage-admins-confirm {
+      padding: 16px;
+      background: #1a1a1a;
+      border: 1px solid #d4a04a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .manage-admins-confirm-heading {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .manage-admins-confirm-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .manage-admins-confirm-label {
+      font-size: 12px;
+      color: #aaa;
+      font-weight: 500;
+    }
+    .manage-admins-confirm-input {
+      width: 100%;
+      padding: 8px 10px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+    .manage-admins-confirm-input:focus {
+      outline: none;
+      border-color: #d4a04a;
+    }
+    .manage-admins-confirm-error {
+      font-size: 13px;
+      color: #e88;
+      background: #2a1515;
+      border: 1px solid #553;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+    }
+    .manage-admins-confirm-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .manage-admins-confirm-btn-confirm {
+      padding: 8px 18px;
+      background: #d4a04a;
+      color: #1a1a1a;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .manage-admins-confirm-btn-confirm:hover:not(:disabled) { background: #e0ad55; }
+    .manage-admins-confirm-btn-confirm:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .manage-admins-confirm-btn-cancel {
+      padding: 8px 18px;
+      background: transparent;
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .manage-admins-confirm-btn-cancel:hover { background: #222; }
 
     /* ─── Plan Request Wizard ─── */
     .wizard-container {
@@ -4830,6 +4926,37 @@
         const admins = allowedUsers.filter(u => u.role === 'admin');
         const otherUsers = allowedUsers.filter(u => u.role !== 'admin');
 
+        const [confirmAction, setConfirmAction] = useState(null);
+        const [confirmInput, setConfirmInput] = useState('');
+        const [confirming, setConfirming] = useState(false);
+        const [confirmError, setConfirmError] = useState(null);
+
+        useEffect(() => {
+          setConfirmInput('');
+          setConfirmError(null);
+        }, [confirmAction]);
+
+        const handleConfirm = async () => {
+          if (confirming) return;
+          if (
+            !confirmAction ||
+            confirmInput.trim().toLowerCase() !== confirmAction.email.toLowerCase()
+          ) {
+            setConfirmError("Email doesn't match. Type the exact address shown above.");
+            return;
+          }
+          setConfirming(true);
+          setConfirmError(null);
+          try {
+            await window.firebaseUpdateUserRole(confirmAction.email, 'admin', currentAdminEmail);
+            setConfirmAction(null);
+            setConfirming(false);
+          } catch (err) {
+            setConfirmError(err.message || 'Failed to update role. Try again.');
+            setConfirming(false);
+          }
+        };
+
         const formatAddedAt = (iso) => {
           if (!iso) return null;
           const d = new Date(iso);
@@ -4884,16 +5011,71 @@
                       No other users in the allowlist.
                     </div>
                   ) : (
-                    otherUsers.map(u => (
-                      <div key={u.id} className="manage-admins-user-row">
-                        <div className="manage-admins-user-info">
-                          <div className="manage-admins-user-email">{u.email}</div>
-                          <div className="manage-admins-user-meta">
-                            {u.role ? u.role : 'no role'}
+                    otherUsers.map(u => {
+                      const inConfirm =
+                        confirmAction &&
+                        confirmAction.type === 'grant' &&
+                        confirmAction.email === u.email;
+                      if (inConfirm) {
+                        const matches =
+                          confirmInput.trim().toLowerCase() === confirmAction.email.toLowerCase();
+                        return (
+                          <div key={u.id} className="manage-admins-confirm">
+                            <div className="manage-admins-confirm-heading">
+                              Grant admin access to {confirmAction.email}?
+                            </div>
+                            <div className="manage-admins-confirm-field">
+                              <label className="manage-admins-confirm-label">
+                                Type the email address to confirm:
+                              </label>
+                              <input
+                                type="text"
+                                className="manage-admins-confirm-input"
+                                value={confirmInput}
+                                onChange={(e) => setConfirmInput(e.target.value)}
+                                placeholder={confirmAction.email}
+                                autoFocus
+                              />
+                            </div>
+                            {confirmError && (
+                              <div className="manage-admins-confirm-error">{confirmError}</div>
+                            )}
+                            <div className="manage-admins-confirm-actions">
+                              <button
+                                className="manage-admins-confirm-btn-cancel"
+                                onClick={() => setConfirmAction(null)}
+                                disabled={confirming}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                className="manage-admins-confirm-btn-confirm"
+                                onClick={handleConfirm}
+                                disabled={confirming || !matches}
+                              >
+                                {confirming ? 'Updating…' : 'Confirm'}
+                              </button>
+                            </div>
                           </div>
+                        );
+                      }
+                      return (
+                        <div key={u.id} className="manage-admins-user-row">
+                          <div className="manage-admins-user-info">
+                            <div className="manage-admins-user-email">{u.email}</div>
+                            <div className="manage-admins-user-meta">
+                              {u.role ? u.role : 'no role'}
+                            </div>
+                          </div>
+                          <button
+                            className="manage-admins-action manage-admins-action-grant"
+                            onClick={() => setConfirmAction({ type: 'grant', email: u.email })}
+                          >
+                            Make admin
+                          </button>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </>
